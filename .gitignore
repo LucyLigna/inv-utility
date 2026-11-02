@@ -1,0 +1,13 @@
+# Built IIS package (contains backend\.env with the database password)
+publish
+
+# Dependencies and build output
+node_modules
+dist
+
+# Secrets and logs
+.env
+logs
+
+# Personal Claude Code settings
+.claude/settings.local.json
