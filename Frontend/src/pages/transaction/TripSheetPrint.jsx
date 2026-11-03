@@ -35,15 +35,18 @@ export async function exportSummaryExcel(sheet, groups) {
   const allBills = groups.flatMap((g) => g.bills);
   const branches = branchesOf(allBills);
   const bold = (value) => ({ value, fontWeight: 'bold' });
+  // Table cells get a thin border all round, empty ones too, so the table reads as a grid
+  const boxed = (value, extra) => ({ value: value ?? '', type: typeof value === 'number' ? Number : String, borderStyle: 'thin', ...extra });
+  const head = (value) => boxed(value, { fontWeight: 'bold' });
   const data = [
     [bold(`Trip Sheet ${sheet.tsc_no}`)],
     [`Route: ${sheet.route_name}`, null, `Loading: ${showDate(sheet.loading_date)} (${sheet.loading_day})`, null, `Driver: ${sheet.driver_name}`],
     [],
-    [bold('Sl #'), bold('Customer'), bold('Place'), ...branches.map(bold), bold('Total')],
+    [head('Sl #'), head('Customer'), head('Place'), ...branches.map(head), head('Total')],
     ...groups.map((g, i) => [
-      i + 1, g.name, g.place || null, ...branches.map((br) => packs(g.bills, br) || null), packs(g.bills),
+      boxed(i + 1), boxed(g.name), boxed(g.place), ...branches.map((br) => boxed(packs(g.bills, br) || null)), boxed(packs(g.bills)),
     ]),
-    [bold('Total'), null, null, ...branches.map((br) => bold(packs(allBills, br))), bold(packs(allBills))],
+    [head('Total'), head(null), head(null), ...branches.map((br) => head(packs(allBills, br))), head(packs(allBills))],
   ];
   await writeExcelFile(data, {
     sheet: sheet.tsc_no,
