@@ -4,11 +4,12 @@ import {
   TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import {
-  AddCircleOutline, CloudDownload, DeleteOutline, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, PlaylistAdd, Refresh,
+  AddCircleOutline, CloudDownload, DeleteOutline, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, PlaylistAdd, Refresh,
   Save, Sort, SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
 import { useConfirm } from '../../components/ConfirmDialog';
+import TripSheetPrint from './TripSheetPrint';
 import api, { errorMessage } from '../../api';
 
 const BORDER = '1px solid #d5d8e0';
@@ -185,9 +186,25 @@ export default function TripSheetBills() {
       setSheet({ ...sheet, total_bills: data.total_bills, total_pack_qty: data.total_pack_qty });
       setNotice(`Saved ${data.total_bills} bills (${data.total_pack_qty} cases) on ${sheet.tsc_no}`);
       loadSheets();
+      return true;
     } catch (err) {
       setError(errorMessage(err));
+      return false;
     }
+  };
+
+  // Prints the sheet as on screen; unsaved changes are saved first so the paper matches what is stored
+  const print = async () => {
+    if (dirty) {
+      const ok = await confirm({
+        title: 'Save before printing?',
+        message: 'This trip sheet has changes that are not saved yet. They will be saved, then the sheet is printed.',
+        cancelLabel: 'Cancel',
+        confirmLabel: 'Save and print',
+      });
+      if (!ok || !(await save())) return;
+    }
+    setTimeout(() => window.print(), 100);
   };
 
   const routeSorted = byCustomer([...selected.values()]);
@@ -219,6 +236,7 @@ export default function TripSheetBills() {
         left={[
           { label: 'Save', icon: <Save />, onClick: save, disabled: !dirty },
           { label: 'Refresh', icon: <Refresh />, onClick: () => process(sheet), disabled: !sheet },
+          { label: 'Print', icon: <Print />, onClick: print, disabled: !sheet || !groups.length },
           {
             label: syncing ? 'Getting latest bills…' : 'Get Latest Bills',
             icon: <CloudDownload />,
@@ -484,6 +502,7 @@ export default function TripSheetBills() {
         )}
       </Box>
       {confirmDialog}
+      <TripSheetPrint sheet={sheet} groups={groups} />
       <Snackbar open={Boolean(notice)} autoHideDuration={3000} onClose={() => setNotice('')} message={notice} />
     </Box>
   );
