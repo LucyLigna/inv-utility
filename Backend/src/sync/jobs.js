@@ -61,7 +61,7 @@ module.exports = {
     // Returns the same current list on every call (not a queue like customer), so one call per run
     keys: ['company_code', 'ba_code', 'sm_slno'],
     columns: [
-      'company_code', 'ba_code', 'sm_slno', 'cu_code', 'smc_no', 'tp_code', 'tpc_desc', 'transporter_type',
+      'company_code', 'ba_code', 'sm_slno', 'cu_code', 'cuc_desc', 'roc_desc', 'smc_no', 'tp_code', 'tpc_desc', 'transporter_type',
       'net_amount', 'pack_qty', 'eway_billno', 'checked_ok', 'printed', 'inp_dt_tm',
     ],
   },

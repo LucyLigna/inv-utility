@@ -210,6 +210,8 @@ CREATE TABLE IF NOT EXISTS salesdetails (
   ba_code          VARCHAR(4)    NOT NULL,
   sm_slno          VARCHAR(10)   NOT NULL,
   cu_code          VARCHAR(8)    DEFAULT NULL,
+  cuc_desc         VARCHAR(100)  DEFAULT NULL,
+  roc_desc         VARCHAR(40)   DEFAULT NULL,
   smc_no           VARCHAR(20)   DEFAULT NULL,
   tp_code          VARCHAR(4)    DEFAULT NULL,
   tpc_desc         VARCHAR(40)   DEFAULT NULL,
