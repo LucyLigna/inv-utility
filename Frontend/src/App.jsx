@@ -5,6 +5,7 @@ import Vehicle from './pages/master/Vehicle';
 import Driver from './pages/master/Driver';
 import TripRoute from './pages/master/TripRoute';
 import TripRouteCustomers from './pages/transaction/TripRouteCustomers';
+import TripSheet from './pages/transaction/TripSheet';
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/master/driver" element={<Driver />} />
         <Route path="/master/trip-route" element={<TripRoute />} />
         <Route path="/transaction/trip-route-customers" element={<TripRouteCustomers />} />
+        <Route path="/transaction/trip-sheet" element={<TripSheet />} />
       </Route>
     </Routes>
   );

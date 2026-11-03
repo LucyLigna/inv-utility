@@ -83,6 +83,23 @@ CREATE TABLE IF NOT EXISTS trip_route_customers (
   CONSTRAINT fk_trip_route_customers_route FOREIGN KEY (trip_code) REFERENCES trip_route (code)
 );
 
+-- Trip sheets. tsc_no is the document number, generated on save as TS-000001, TS-000002, ...
+CREATE TABLE IF NOT EXISTS trip_sheet (
+  ts_code      INT          NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tsc_no       VARCHAR(20)  NOT NULL,
+  entry_date   DATE         NOT NULL,
+  trip_code    INT          NOT NULL,
+  driver_code  INT          NOT NULL,
+  loading_date DATE         DEFAULT NULL,
+  start_date   DATE         DEFAULT NULL,
+  end_date     DATE         DEFAULT NULL,
+  remarks      VARCHAR(500) DEFAULT NULL,
+  inp_dt_tm    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_trip_sheet_no (tsc_no),
+  CONSTRAINT fk_trip_sheet_route FOREIGN KEY (trip_code) REFERENCES trip_route (code),
+  CONSTRAINT fk_trip_sheet_driver FOREIGN KEY (driver_code) REFERENCES driver (code)
+);
+
 INSERT IGNORE INTO sys_menufile (menu_code, name, sort_order) VALUES
   ('M01', 'Master', 1),
   ('M02', 'Transaction', 2);
@@ -91,7 +108,8 @@ INSERT IGNORE INTO sys_programfile (program_code, menu_code, name, route, sort_o
   ('P0101', 'M01', 'Vehicle', '/master/vehicle', 1),
   ('P0102', 'M01', 'Driver', '/master/driver', 2),
   ('P0103', 'M01', 'Trip Route', '/master/trip-route', 3),
-  ('P0201', 'M02', 'Trip Route Wise Customers', '/transaction/trip-route-customers', 1);
+  ('P0201', 'M02', 'Trip Route Wise Customers', '/transaction/trip-route-customers', 1),
+  ('P0202', 'M02', 'Trip Sheet', '/transaction/trip-sheet', 2);
 
 -- ---------------------------------------------------------------------------
 -- Data pulled from the INV API (192.168.3.24) by the scheduler in src/sync

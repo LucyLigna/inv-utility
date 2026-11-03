@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert, Box, FormControlLabel, Paper, Radio, RadioGroup, Stack, TextField, Typography,
+  Alert, Box, FormControlLabel, MenuItem, Paper, Radio, RadioGroup, Stack, TextField, Typography,
 } from '@mui/material';
 import {
   AddCircle, ArrowBack, Close, Download, Edit, Info, Refresh, Save, Visibility,
@@ -27,27 +27,41 @@ const span = (cols) => ({ xs: 'span 12', md: `span ${cols}` });
 //   apiPath       '/drivers' (GET list, POST, PUT /:code, GET /check-duplicate?field=&value=&excludeCode=)
 //   columns       list columns: [{ label, field, width, render(row), exportValue(row) }]
 //   description   one line under the form heading ('Vehicle number, make and status')
-//   fields        text fields: [{ name, label, required, maxLength, upper, unique, cols (of 12) }]
-//   statusCols    width of the Status field (of 12)
-//   empty         new-record values, toForm(row) -> form values for an existing row
+//   fields        [{ name, label, required, maxLength, upper, unique, cols (of 12), rows, type }]
+//                 type: 'text' (default) | 'date' | 'auto' (read-only, filled by the server on save)
+//                       | 'select' with optionsPath ('/drivers') and optionLabel(option); only Active options are
+//                         offered, plus the one the record already uses
+//   statusCols    width of the Status field (of 12); noStatus hides it
+//   empty         new-record values (or a function returning them), toForm(row) -> form values for an existing row
 //   renderExtra   optional ({ form, setForm, readOnly }) => extra form controls
 //   validate      optional (form) => error message for the extra controls, or nothing when valid
 //   searchFields, searchPlaceholder, exportFile
 export default function MasterScreen({ config }) {
   const {
-    title, entity, description, apiPath, columns, fields, statusCols, empty, toForm, renderExtra, validate, searchFields,
-    searchPlaceholder, exportFile,
+    title, entity, description, apiPath, columns, fields, statusCols, noStatus, empty, toForm, renderExtra, validate,
+    searchFields, searchPlaceholder, exportFile,
   } = config;
 
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
   const [mode, setMode] = useState('list'); // list | add | edit | view
-  const [form, setForm] = useState(empty);
+  // empty may be a function, for defaults worked out when the form opens (such as today's date)
+  const newRecord = () => (typeof empty === 'function' ? empty() : empty);
+  const [form, setForm] = useState(newRecord);
   const [editCode, setEditCode] = useState(null);
   const [error, setError] = useState('');
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
+  const [options, setOptions] = useState({}); // dropdown choices per select field
+
+  useEffect(() => {
+    fields.filter((f) => f.type === 'select').forEach((f) => {
+      api.get(f.optionsPath)
+        .then(({ data }) => setOptions((o) => ({ ...o, [f.name]: data })))
+        .catch((err) => setError(errorMessage(err)));
+    });
+  }, []);
 
   const load = () =>
     api.get(apiPath)
@@ -64,7 +78,7 @@ export default function MasterScreen({ config }) {
   const selectedRow = rows.find((r) => r.code === selected);
 
   const openForm = (nextMode, row) => {
-    setForm(row ? toForm(row) : empty);
+    setForm(row ? toForm(row) : newRecord());
     setEditCode(row ? row.code : null);
     if (row) setSelected(row.code);
     setFormError('');
@@ -96,7 +110,7 @@ export default function MasterScreen({ config }) {
   const hasFieldErrors = Object.values(fieldErrors).some(Boolean);
 
   const save = async () => {
-    const missing = fields.filter((f) => f.required && !String(form[f.name] || '').trim());
+    const missing = fields.filter((f) => f.required && f.type !== 'auto' && !String(form[f.name] ?? '').trim());
     if (missing.length) {
       setFormError(`${missing.map((f) => f.label).join(' and ')} required`);
       return;
@@ -159,6 +173,7 @@ export default function MasterScreen({ config }) {
     ] };
 
   const readOnly = mode === 'view';
+  const firstEditable = fields.find((f) => f.type !== 'auto')?.name;
   const heading = { add: `Add ${entity}`, edit: `Edit ${entity}`, view: `View ${entity}` }[mode];
 
   return (
@@ -211,23 +226,42 @@ export default function MasterScreen({ config }) {
               }}
             >
               {formError && <Alert severity="error" sx={{ gridColumn: 'span 12' }}>{formError}</Alert>}
-              {fields.map((f, i) => (
-                <TextField
-                  key={f.name}
-                  label={f.label}
-                  required={f.required && !readOnly}
-                  autoFocus={i === 0 && !readOnly}
-                  value={form[f.name]}
-                  onChange={(e) => changeField(f, e.target.value)}
-                  onBlur={() => checkDuplicate(f)}
-                  error={Boolean(fieldErrors[f.name])}
-                  helperText={fieldErrors[f.name]}
-                  InputProps={{ readOnly }}
-                  inputProps={{ maxLength: f.maxLength }}
-                  sx={{ ...FIELD_SX, gridColumn: span(f.cols || 4) }}
-                />
-              ))}
+              {fields.map((f) => {
+                const auto = f.type === 'auto';
+                const choices = f.type === 'select'
+                  ? (options[f.name] || []).filter((o) => o.status === 'Active' || o.code === form[f.name])
+                  : null;
+                return (
+                  <TextField
+                    key={f.name}
+                    label={f.label}
+                    required={f.required && !readOnly && !auto}
+                    autoFocus={f.name === firstEditable && !readOnly}
+                    select={Boolean(choices)}
+                    type={f.type === 'date' ? 'date' : 'text'}
+                    multiline={Boolean(f.rows)}
+                    minRows={f.rows}
+                    value={auto ? form[f.name] || 'Generated on save' : form[f.name] ?? ''}
+                    onChange={(e) => changeField(f, e.target.value)}
+                    onBlur={() => checkDuplicate(f)}
+                    error={Boolean(fieldErrors[f.name])}
+                    helperText={fieldErrors[f.name]}
+                    InputLabelProps={f.type === 'date' || auto ? { shrink: true } : undefined}
+                    InputProps={{ readOnly: readOnly || auto }}
+                    inputProps={{ maxLength: f.maxLength }}
+                    sx={{
+                      ...FIELD_SX,
+                      gridColumn: span(f.cols || 4),
+                      ...(auto && { '& .MuiOutlinedInput-root': { bgcolor: '#f5f6fa' } }),
+                      ...(auto && !form[f.name] && { '& .MuiOutlinedInput-input': { color: '#888', fontWeight: 400 } }),
+                    }}
+                  >
+                    {choices && choices.map((o) => <MenuItem key={o.code} value={o.code}>{f.optionLabel(o)}</MenuItem>)}
+                  </TextField>
+                );
+              })}
               {/* Status as Active / Inactive radio buttons inside an outlined box with the label on its border */}
+              {!noStatus && (
               <Box
                 component="fieldset"
                 sx={{
@@ -256,6 +290,7 @@ export default function MasterScreen({ config }) {
                   ))}
                 </RadioGroup>
               </Box>
+              )}
               {renderExtra && renderExtra({ form, setForm, readOnly })}
             </Box>
           </Paper>
