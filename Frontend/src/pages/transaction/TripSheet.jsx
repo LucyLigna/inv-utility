@@ -3,9 +3,10 @@ import MasterScreen from '../../components/MasterScreen';
 // '2026-11-03' -> '03-11-2026'
 const showDate = (d) => (d ? d.split('-').reverse().join('-') : '');
 
-// Today as 'YYYY-MM-DD' in local time
-const today = () => {
+// Today plus the given number of days, as 'YYYY-MM-DD' in local time
+const dayFromToday = (days = 0) => {
   const d = new Date();
+  d.setDate(d.getDate() + days);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
@@ -57,9 +58,10 @@ const config = {
     { name: 'end_date', label: 'End Date', type: 'date', cols: 2 },
     { name: 'remarks', label: 'Remarks', maxLength: 500, rows: 2, cols: 12 },
   ],
+  // New sheet: entry and loading today, start and end tomorrow
   empty: () => ({
-    tsc_no: '', entry_date: today(), trip_code: '', driver_code: '',
-    loading_date: '', start_date: '', end_date: '', remarks: '',
+    tsc_no: '', entry_date: dayFromToday(), trip_code: '', driver_code: '',
+    loading_date: dayFromToday(), start_date: dayFromToday(1), end_date: dayFromToday(1), remarks: '',
   }),
   toForm: (r) => ({
     tsc_no: r.tsc_no,
