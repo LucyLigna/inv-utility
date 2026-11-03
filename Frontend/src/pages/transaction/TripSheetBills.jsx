@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert, Autocomplete, Box, Button, Chip, IconButton, Paper, Snackbar, Table, TableBody, TableCell, TableContainer,
+  Alert, Autocomplete, Box, Button, Chip, IconButton, ListItemText, Menu, MenuItem, Paper, Snackbar, Table, TableBody, TableCell, TableContainer,
   TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import {
@@ -83,6 +83,9 @@ export default function TripSheetBills() {
   const [notice, setNotice] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [reloadKey, setReloadKey] = useState(0); // bump to reload the bills list
+  const [printMenu, setPrintMenu] = useState(null); // element the print-format menu opens from
+  const [printFormat, setPrintFormat] = useState('branch');
+  const [contacts, setContacts] = useState({}); // mobile and sales executive per customer, for printing
   const [confirm, confirmDialog] = useConfirm();
 
   const loadSheets = () => api.get('/trip-sheet-bills/sheets')
@@ -194,7 +197,9 @@ export default function TripSheetBills() {
   };
 
   // Prints the sheet as on screen; unsaved changes are saved first so the paper matches what is stored
-  const print = async () => {
+  // format: 'branch' (cases per company - branch) | 'customer' (each customer's bills, with mobile and sales executive)
+  const print = async (format) => {
+    setPrintMenu(null);
     if (dirty) {
       const ok = await confirm({
         title: 'Save before printing?',
@@ -204,7 +209,17 @@ export default function TripSheetBills() {
       });
       if (!ok || !(await save())) return;
     }
-    setTimeout(() => window.print(), 100);
+    if (format === 'customer') {
+      try {
+        const { data } = await api.get(`/trip-sheet-bills/${sheet.code}`);
+        setContacts(data.customers || {});
+      } catch (err) {
+        setError(errorMessage(err));
+        return;
+      }
+    }
+    setPrintFormat(format);
+    setTimeout(() => window.print(), 150); // after the chosen layout has rendered
   };
 
   const routeSorted = byCustomer([...selected.values()]);
@@ -236,7 +251,7 @@ export default function TripSheetBills() {
         left={[
           { label: 'Save', icon: <Save />, onClick: save, disabled: !dirty },
           { label: 'Refresh', icon: <Refresh />, onClick: () => process(sheet), disabled: !sheet },
-          { label: 'Print', icon: <Print />, onClick: print, disabled: !sheet || !groups.length },
+          { label: 'Print', icon: <Print />, onClick: (e) => setPrintMenu(e.currentTarget), disabled: !sheet || !groups.length },
           {
             label: syncing ? 'Getting latest bills…' : 'Get Latest Bills',
             icon: <CloudDownload />,
@@ -502,7 +517,15 @@ export default function TripSheetBills() {
         )}
       </Box>
       {confirmDialog}
-      <TripSheetPrint sheet={sheet} groups={groups} />
+      <Menu anchorEl={printMenu} open={Boolean(printMenu)} onClose={() => setPrintMenu(null)}>
+        <MenuItem onClick={() => print('branch')}>
+          <ListItemText primary="Summary by branch" secondary="Cases per customer and company - branch (landscape)" />
+        </MenuItem>
+        <MenuItem onClick={() => print('customer')}>
+          <ListItemText primary="Customer-wise bills" secondary="Each customer's bills, with mobile and sales executive" />
+        </MenuItem>
+      </Menu>
+      <TripSheetPrint sheet={sheet} groups={groups} format={printFormat} contacts={contacts} />
       <Snackbar open={Boolean(notice)} autoHideDuration={3000} onClose={() => setNotice('')} message={notice} />
     </Box>
   );

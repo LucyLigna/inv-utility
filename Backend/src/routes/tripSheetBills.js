@@ -59,7 +59,24 @@ router.get('/sheets', async (req, res, next) => {
   }
 });
 
-// The sheet, its route's branches and the bills already saved on it
+// Mobile number and sales executive of the given customers ('company|branch|customer' keys), for printing:
+// { 'BAD|E003|P122': { mobile, sales_executive } }
+async function customerContacts(keys) {
+  const unique = [...new Set(keys)].map((k) => k.split('|'));
+  if (!unique.length) return {};
+  const [rows] = await pool.query(
+    `SELECT c.company_code, c.ba_code, c.cu_code, c.cuc_mobile AS mobile, v.salesexecutive_name AS sales_executive
+     FROM customer c
+     LEFT JOIN view_customer_list v ON v.company_code = c.company_code AND v.ba_code = c.ba_code AND v.cu_code = c.cu_code
+     WHERE (c.company_code, c.ba_code, c.cu_code) IN (?)`,
+    [unique]
+  );
+  return Object.fromEntries(rows.map((r) => [
+    `${r.company_code}|${r.ba_code}|${r.cu_code}`, { mobile: r.mobile, sales_executive: r.sales_executive },
+  ]));
+}
+
+// The sheet, its bills and the contact details of their customers
 router.get('/:tsCode', async (req, res, next) => {
   try {
     const sheet = await findSheet(req.params.tsCode);
@@ -73,7 +90,7 @@ router.get('/:tsCode', async (req, res, next) => {
        ORDER BY tb.sort_order IS NULL, tb.sort_order`,
       [sheet.trip_code, sheet.trip_code, sheet.code]
     );
-    res.json({ sheet, bills });
+    res.json({ sheet, bills, customers: await customerContacts(bills.map((b) => b.group_key)) });
   } catch (err) {
     next(err);
   }
