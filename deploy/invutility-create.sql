@@ -280,6 +280,7 @@ CREATE TABLE IF NOT EXISTS `trip_sheet_bills` (
   `sm_slno` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL,
   `pack_qty` int DEFAULT NULL,
   `amount` decimal(12,2) DEFAULT NULL,
+  `sort_order` int DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`ts_code`,`company_code`,`ba_code`,`sm_slno`),
   KEY `ix_trip_sheet_bills_bill` (`company_code`,`ba_code`,`sm_slno`),

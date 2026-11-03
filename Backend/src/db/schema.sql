@@ -114,6 +114,8 @@ CREATE TABLE IF NOT EXISTS trip_sheet_bills (
   sm_slno      VARCHAR(10)   NOT NULL,
   pack_qty     INT           DEFAULT NULL,
   amount       DECIMAL(12,2) DEFAULT NULL,
+  -- Delivery order on this sheet (customers in the order arranged on the screen, their bills together)
+  sort_order   INT           DEFAULT NULL,
   created_at   TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (ts_code, company_code, ba_code, sm_slno),
   KEY ix_trip_sheet_bills_bill (company_code, ba_code, sm_slno),

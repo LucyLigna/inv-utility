@@ -64,11 +64,12 @@ router.get('/:tsCode', async (req, res, next) => {
     const sheet = await findSheet(req.params.tsCode);
     if (!sheet) return res.status(404).json({ message: 'Trip sheet not found' });
     const [bills] = await pool.query(
-      `SELECT ${BILL_FIELDS}
+      `SELECT ${BILL_FIELDS}, tb.sort_order AS sheet_order
        FROM trip_sheet_bills tb
        JOIN salesdetails s ON s.company_code = tb.company_code AND s.ba_code = tb.ba_code AND s.sm_slno = tb.sm_slno
        ${BILL_JOINS}
-       WHERE tb.ts_code = ?`,
+       WHERE tb.ts_code = ?
+       ORDER BY tb.sort_order IS NULL, tb.sort_order`,
       [sheet.trip_code, sheet.trip_code, sheet.code]
     );
     res.json({ sheet, bills });
@@ -131,7 +132,8 @@ router.get('/:tsCode/available', async (req, res, next) => {
   }
 });
 
-// Replaces the sheet's bills and updates its totals. Body: { bills: [{ company_code, ba_code, sm_slno }] }
+// Replaces the sheet's bills and updates its totals. Body: { bills: [{ company_code, ba_code, sm_slno }] },
+// in delivery order; each bill's position is kept as its sort_order
 router.put('/:tsCode', async (req, res, next) => {
   const keys = (Array.isArray(req.body.bills) ? req.body.bills : [])
     .map((b) => [String(b.company_code || '').trim(), String(b.ba_code || '').trim(), String(b.sm_slno || '').trim()])
@@ -177,9 +179,11 @@ router.put('/:tsCode', async (req, res, next) => {
     }
     await conn.query('DELETE FROM trip_sheet_bills WHERE ts_code = ?', [sheet.ts_code]);
     if (bills.length) {
+      const position = new Map(keys.map((k, i) => [k.join('|'), i + 1]));
       await conn.query(
-        'INSERT INTO trip_sheet_bills (ts_code, company_code, ba_code, sm_slno, pack_qty, amount) VALUES ?',
-        [bills.map((b) => [sheet.ts_code, b.company_code, b.ba_code, b.sm_slno, b.pack_qty, b.net_amount])]
+        'INSERT INTO trip_sheet_bills (ts_code, company_code, ba_code, sm_slno, pack_qty, amount, sort_order) VALUES ?',
+        [bills.map((b) => [sheet.ts_code, b.company_code, b.ba_code, b.sm_slno, b.pack_qty, b.net_amount,
+          position.get(`${b.company_code}|${b.ba_code}|${b.sm_slno}`)])]
       );
     }
     const totalPack = bills.reduce((sum, b) => sum + (Number(b.pack_qty) || 0), 0);

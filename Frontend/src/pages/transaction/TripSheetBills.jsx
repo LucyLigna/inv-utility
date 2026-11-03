@@ -4,8 +4,8 @@ import {
   TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import {
-  AddCircleOutline, DeleteOutline, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, PlaylistAdd, Refresh, Save,
-  SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
+  AddCircleOutline, DeleteOutline, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, PlaylistAdd, Refresh,
+  Save, Sort, SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
 import { useConfirm } from '../../components/ConfirmDialog';
@@ -22,8 +22,6 @@ const money = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDig
 const showDate = (d) => (d ? d.split('-').reverse().join('-') : '');
 const showDateTime = (d) => (d ? `${showDate(d.slice(0, 10))} ${d.slice(11)}` : '');
 const sheetLabel = (s) => `${s.tsc_no} · ${s.route_name} · ${showDate(s.loading_date)} (${(s.loading_day || '').slice(0, 3)})`;
-const snapshot = (map) => JSON.stringify([...map.keys()].sort());
-
 // Selected bills grouped under their main customer (a sub customer's bills go under its main customer on the
 // route), in the route's visiting order; customers not on the route come last
 function byCustomer(bills) {
@@ -45,6 +43,25 @@ function byCustomer(bills) {
   return list;
 }
 
+// Groups in the user's order (customOrder: group keys), or the route's order when there is none.
+// A customer added after reordering goes before the first customer that comes later on the route.
+function arrange(routeSorted, customOrder) {
+  if (!customOrder) return routeSorted;
+  const byKey = new Map(routeSorted.map((g) => [g.key, g]));
+  const result = customOrder.filter((k) => byKey.has(k)).map((k) => byKey.get(k));
+  const rank = (g) => g.order ?? 1e9;
+  routeSorted.filter((g) => !customOrder.includes(g.key)).forEach((g) => {
+    const at = result.findIndex((x) => rank(x) > rank(g));
+    result.splice(at === -1 ? result.length : at, 0, g);
+  });
+  return result;
+}
+
+// What would be saved (bills in delivery order), as a string, to tell whether anything changed
+const snapshot = (selected, customOrder) => JSON.stringify(
+  arrange(byCustomer([...selected.values()]), customOrder).flatMap((g) => g.bills.map(billKey))
+);
+
 export default function TripSheetBills() {
   const [sheets, setSheets] = useState([]);
   const [picked, setPicked] = useState(null); // sheet chosen in the box
@@ -52,6 +69,8 @@ export default function TripSheetBills() {
   const [selected, setSelected] = useState(new Map()); // bill key -> bill
   const [savedKey, setSavedKey] = useState('');
   const [collapsed, setCollapsed] = useState(new Set()); // customer groups whose bills are hidden
+  const [customOrder, setCustomOrder] = useState(null); // group keys in the user's order; null = route order
+  const [dragKey, setDragKey] = useState(null);
   const [customers, setCustomers] = useState('route'); // route | all
   const [transport, setTransport] = useState('own'); // own | all
   const [fromDate, setFromDate] = useState('');
@@ -71,7 +90,7 @@ export default function TripSheetBills() {
     loadSheets();
   }, []);
 
-  const dirty = Boolean(sheet) && snapshot(selected) !== savedKey;
+  const dirty = Boolean(sheet) && snapshot(selected, customOrder) !== savedKey;
 
   const process = async (s = picked) => {
     if (!s) return;
@@ -83,9 +102,14 @@ export default function TripSheetBills() {
     try {
       const { data } = await api.get(`/trip-sheet-bills/${s.code}`);
       const map = new Map(data.bills.map((b) => [billKey(b), b]));
+      // Bills come in their saved order; keep the customers in that order if it was saved
+      const order = data.bills.some((b) => b.sheet_order != null)
+        ? [...new Set(data.bills.map((b) => b.group_key))]
+        : null;
       setSheet(data.sheet);
       setSelected(map);
-      setSavedKey(snapshot(map));
+      setCustomOrder(order);
+      setSavedKey(snapshot(map, order));
       setCollapsed(new Set());
       // Bill dates default to the sheet's loading date
       setFromDate(data.sheet.loading_date || '');
@@ -131,9 +155,9 @@ export default function TripSheetBills() {
 
   const save = async () => {
     try {
-      const bills = [...selected.values()].map(({ company_code, ba_code, sm_slno }) => ({ company_code, ba_code, sm_slno }));
+      const bills = groups.flatMap((g) => g.bills).map(({ company_code, ba_code, sm_slno }) => ({ company_code, ba_code, sm_slno }));
       const { data } = await api.put(`/trip-sheet-bills/${sheet.code}`, { bills });
-      setSavedKey(snapshot(selected));
+      setSavedKey(snapshot(selected, customOrder));
       setSheet({ ...sheet, total_bills: data.total_bills, total_pack_qty: data.total_pack_qty });
       setNotice(`Saved ${data.total_bills} bills (${data.total_pack_qty} cases) on ${sheet.tsc_no}`);
       loadSheets();
@@ -142,7 +166,19 @@ export default function TripSheetBills() {
     }
   };
 
-  const groups = byCustomer([...selected.values()]);
+  const routeSorted = byCustomer([...selected.values()]);
+  const groups = arrange(routeSorted, customOrder);
+  const inRouteOrder = groups.every((g, i) => g.key === routeSorted[i].key);
+
+  // Drop a customer row on another: it takes that row's place
+  const moveGroup = (fromKey, toKey) => {
+    if (!fromKey || fromKey === toKey) return;
+    const keys = groups.map((g) => g.key);
+    const from = keys.indexOf(fromKey);
+    const to = keys.indexOf(toKey);
+    keys.splice(to, 0, keys.splice(from, 1)[0]);
+    setCustomOrder(keys);
+  };
   const totals = groups.reduce((t, g) => ({ bills: t.bills + g.bills.length, cases: t.cases + g.cases, amount: t.amount + g.amount }),
     { bills: 0, cases: 0, amount: 0 });
   const allCollapsed = groups.length > 0 && groups.every((g) => collapsed.has(g.key));
@@ -215,16 +251,28 @@ export default function TripSheetBills() {
                   Selected Customer ({groups.length})
                   {dirty && <Box component="span" sx={{ color: '#c77700', fontWeight: 400 }}> · not saved</Box>}
                 </Typography>
-                {groups.length > 0 && (
-                  <Button
-                    size="small"
-                    startIcon={allCollapsed ? <UnfoldMore /> : <UnfoldLess />}
-                    onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(groups.map((g) => g.key)))}
-                  >
-                    {allCollapsed ? 'Show bills' : 'Hide bills'}
-                  </Button>
-                )}
+                <Box>
+                  {!inRouteOrder && (
+                    <Tooltip title="Put the customers back in the order of Trip Route Wise Customers">
+                      <Button size="small" startIcon={<Sort />} onClick={() => setCustomOrder(null)}>Route order</Button>
+                    </Tooltip>
+                  )}
+                  {groups.length > 0 && (
+                    <Button
+                      size="small"
+                      startIcon={allCollapsed ? <UnfoldMore /> : <UnfoldLess />}
+                      onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(groups.map((g) => g.key)))}
+                    >
+                      {allCollapsed ? 'Show bills' : 'Hide bills'}
+                    </Button>
+                  )}
+                </Box>
               </Box>
+              <Typography variant="body2" color="text.secondary" mb={1}>
+                {inRouteOrder
+                  ? 'In the order of Trip Route Wise Customers. Drag the grip on a customer to change the order for this trip sheet.'
+                  : 'In your order for this trip sheet. Drag the grip on a customer to change it.'}
+              </Typography>
               <TableContainer sx={{ maxHeight: 'calc(100vh - 340px)' }}>
                 <Table stickyHeader size="small" sx={{ borderCollapse: 'collapse' }}>
                   <TableHead>
@@ -241,9 +289,24 @@ export default function TripSheetBills() {
                     {groups.map((g) => {
                       const open = !collapsed.has(g.key);
                       return [
-                        <TableRow key={g.key} hover sx={{ bgcolor: '#f8f9fc' }}>
+                        <TableRow
+                          key={g.key}
+                          hover
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={() => { moveGroup(dragKey, g.key); setDragKey(null); }}
+                          sx={{ bgcolor: dragKey === g.key ? '#e3e8f8' : '#f8f9fc' }}
+                        >
                           <TableCell sx={{ ...cell, fontWeight: 700 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <Box
+                                draggable
+                                onDragStart={(e) => { setDragKey(g.key); e.dataTransfer.setDragImage(e.currentTarget.closest('tr'), 20, 20); }}
+                                onDragEnd={() => setDragKey(null)}
+                                title="Drag to move"
+                                sx={{ display: 'flex', cursor: 'grab' }}
+                              >
+                                <DragIndicator fontSize="small" sx={{ color: '#9aa0ab' }} />
+                              </Box>
                               <IconButton size="small" sx={{ p: 0.25 }} onClick={() => toggleGroup(g.key)} aria-label={open ? 'hide bills' : 'show bills'}>
                                 {open ? <KeyboardArrowDown fontSize="small" /> : <KeyboardArrowRight fontSize="small" />}
                               </IconButton>
@@ -262,8 +325,13 @@ export default function TripSheetBills() {
                           </TableCell>
                         </TableRow>,
                         ...(open ? g.bills.map((b) => (
-                          <TableRow key={billKey(b)} hover>
-                            <TableCell sx={{ ...cell, pl: 5 }} colSpan={2}>
+                          <TableRow
+                            key={billKey(b)}
+                            hover
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={() => { moveGroup(dragKey, g.key); setDragKey(null); }}
+                          >
+                            <TableCell sx={{ ...cell, pl: 7 }} colSpan={2}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                 <SubdirectoryArrowRight fontSize="small" sx={{ color: '#9aa0ab' }} />
                                 <b>{b.smc_no}</b>
