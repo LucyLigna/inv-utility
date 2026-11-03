@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert, Box, FormControlLabel, MenuItem, Paper, Radio, RadioGroup, Snackbar, Stack, TextField, Typography,
+  Alert, Box, Button, FormControlLabel, MenuItem, Paper, Radio, RadioGroup, Snackbar, Stack, TextField, Typography,
 } from '@mui/material';
 import {
   AddCircle, ArrowBack, Close, Delete, Download, Edit, Info, Refresh, Save, Visibility,
@@ -40,18 +40,23 @@ const span = (cols) => ({ xs: 'span 12', md: `span ${cols}` });
 //                 (DELETE apiPath/:code; the server decides what deleting means, e.g. marking it cancelled)
 //                 deletable.blockedReason(row) -> message when the row can't be deleted yet, shown instead of asking
 //   actions       optional extra buttons for the selected row: [{ label, icon, request(row) -> promise,
-//                 confirm(row) -> { title, message, confirmLabel, cancelLabel }, blockedReason(row), done(row) }]
+//                 confirm(row) -> { title, message, confirmLabel, cancelLabel }, blockedReason(row), done(row),
+//                 availableFor(row) -> whether the button is enabled (default: rows that aren't locked) }]
 //   isLocked      optional (row) => true for rows that can only be viewed (e.g. cancelled ones)
 //   A field with lockOnEdit: true can be filled in when adding but not changed when editing
+//   dateFilter    optional { field: 'loading_date', label: 'Loading date' }: From / To boxes above the list
+//                 that keep rows whose field ('YYYY-MM-DD') is in the range; either box may be left empty
 //   searchFields, searchPlaceholder, exportFile
 export default function MasterScreen({ config }) {
   const {
     title, entity, description, apiPath, columns, fields, statusCols, noStatus, empty, toForm, renderExtra, validate,
-    deletable, actions = [], isLocked = () => false, searchFields, searchPlaceholder, exportFile,
+    deletable, actions = [], isLocked = () => false, dateFilter, searchFields, searchPlaceholder, exportFile,
   } = config;
 
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [selected, setSelected] = useState(null);
   const [mode, setMode] = useState('list'); // list | add | edit | view
   // empty may be a function, for defaults worked out when the form opens (such as today's date)
@@ -177,7 +182,13 @@ export default function MasterScreen({ config }) {
   };
 
   const q = search.trim().toLowerCase();
-  const filtered = rows.filter((r) => !q || searchFields.some((f) => String(r[f] || '').toLowerCase().includes(q)));
+  const inDateRange = (r) => {
+    if (!dateFilter) return true;
+    const d = r[dateFilter.field] || '';
+    return (!fromDate || d >= fromDate) && (!toDate || (d && d <= toDate));
+  };
+  const filtered = rows.filter((r) => inDateRange(r)
+    && (!q || searchFields.some((f) => String(r[f] || '').toLowerCase().includes(q))));
 
   const exportExcel = async () => {
     const { default: writeExcelFile } = await import('write-excel-file/browser');
@@ -208,7 +219,10 @@ export default function MasterScreen({ config }) {
         disabled: !selectedRow || selectedLocked,
       }] : []),
       ...actions.map((a) => ({
-        label: a.label, icon: a.icon, onClick: () => runAction(a), disabled: !selectedRow || selectedLocked,
+        label: a.label,
+        icon: a.icon,
+        onClick: () => runAction(a),
+        disabled: !selectedRow || (a.availableFor ? !a.availableFor(selectedRow) : selectedLocked),
       })),
       { label: 'Refresh', icon: <Refresh />, onClick: load },
     ],
@@ -242,13 +256,30 @@ export default function MasterScreen({ config }) {
           <>
             <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} gap={2}>
               <Typography variant="h5">{title}</Typography>
-              <TextField
-                size="small"
-                placeholder={searchPlaceholder}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                sx={{ width: 300 }}
-              />
+              <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap" justifyContent="flex-end">
+                {dateFilter && (
+                  <>
+                    <TextField
+                      type="date" size="small" label={`${dateFilter.label} from`} value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 175 }}
+                    />
+                    <TextField
+                      type="date" size="small" label={`${dateFilter.label} to`} value={toDate}
+                      onChange={(e) => setToDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 175 }}
+                    />
+                    {(fromDate || toDate) && (
+                      <Button size="small" onClick={() => { setFromDate(''); setToDate(''); }}>Clear dates</Button>
+                    )}
+                  </>
+                )}
+                <TextField
+                  size="small"
+                  placeholder={searchPlaceholder}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  sx={{ width: 300 }}
+                />
+              </Stack>
             </Stack>
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
             <ListTable

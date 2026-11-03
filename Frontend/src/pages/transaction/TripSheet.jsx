@@ -1,10 +1,12 @@
-import { LockOutlined } from '@mui/icons-material';
+import { LockOpenOutlined, LockOutlined } from '@mui/icons-material';
 import MasterScreen from '../../components/MasterScreen';
 import { StatusCell } from '../../components/ListTable';
 import api from '../../api';
 
 // '2026-11-03' -> '03-11-2026'
 const showDate = (d) => (d ? d.split('-').reverse().join('-') : '');
+// '2026-11-03 16:57' -> '03-11-2026 16:57'
+const showDateTime = (d) => (d ? `${showDate(d.slice(0, 10))} ${d.slice(11)}` : '');
 
 // Today plus the given number of days, as 'YYYY-MM-DD' in local time
 const dayFromToday = (days = 0) => {
@@ -24,6 +26,7 @@ const config = {
   exportFile: 'trip-sheets',
   searchFields: ['tsc_no', 'route_name', 'driver_name', 'remarks', 'status'],
   searchPlaceholder: 'Search sheet no, route, driver',
+  dateFilter: { field: 'loading_date', label: 'Loading date' },
   columns: [
     { label: 'Sheet No', field: 'tsc_no', width: 130 },
     dateColumn('Entry Date', 'entry_date'),
@@ -35,6 +38,14 @@ const config = {
     { label: 'Bills', field: 'total_bills', width: 80, align: 'right' },
     { label: 'Cases', field: 'total_pack_qty', width: 80, align: 'right' },
     { label: 'Status', field: 'status', width: 140, render: (r) => <StatusCell status={r.status} /> },
+    {
+      label: 'Closed On',
+      field: 'closed_at',
+      width: 150,
+      align: 'center',
+      render: (r) => showDateTime(r.closed_at),
+      exportValue: (r) => showDateTime(r.closed_at),
+    },
   ],
   // Deleting only marks the sheet Cancelled; cancelled sheets stay in the list and can only be viewed
   deletable: {
@@ -50,12 +61,28 @@ const config = {
     icon: <LockOutlined />,
     confirm: (r) => ({
       title: `Close trip sheet ${r.tsc_no}?`,
-      message: `${r.route_name}, ${r.total_bills} bill${r.total_bills === 1 ? '' : 's'} and ${r.total_pack_qty} cases. Once closed it can't be edited and won't appear in Trip Sheet - Bill Details. This can't be undone.`,
+      message: `${r.route_name}, ${r.total_bills} bill${r.total_bills === 1 ? '' : 's'} and ${r.total_pack_qty} cases. Once closed it can't be edited and won't appear in Trip Sheet - Bill Details. It can be reopened only today.`,
       cancelLabel: 'Keep it open',
       confirmLabel: 'Close sheet',
     }),
     request: (r) => api.post(`/trip-sheets/${r.code}/close`),
     done: (r) => `Trip sheet ${r.tsc_no} closed`,
+  }, {
+    // Reopen: only on the day the sheet was closed
+    label: 'Reopen',
+    icon: <LockOpenOutlined />,
+    availableFor: (r) => r.status === 'Closed',
+    blockedReason: (r) => ((r.closed_at || '').slice(0, 10) === dayFromToday()
+      ? null
+      : `Trip sheet ${r.tsc_no} was closed on ${showDateTime(r.closed_at)}. Only a sheet closed today can be reopened.`),
+    confirm: (r) => ({
+      title: `Reopen trip sheet ${r.tsc_no}?`,
+      message: 'It becomes Active again: it can be edited and appears in Trip Sheet - Bill Details.',
+      cancelLabel: 'Keep it closed',
+      confirmLabel: 'Reopen',
+    }),
+    request: (r) => api.post(`/trip-sheets/${r.code}/reopen`),
+    done: (r) => `Trip sheet ${r.tsc_no} reopened`,
   }],
   // Cancelled and closed sheets stay in the list and can only be viewed
   isLocked: (r) => r.status !== 'Active',

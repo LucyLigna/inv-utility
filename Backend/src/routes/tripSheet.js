@@ -143,6 +143,29 @@ router.post('/:code/close', async (req, res, next) => {
   }
 });
 
+// Reopen a closed sheet; only on the day it was closed (server date)
+router.post('/:code/reopen', async (req, res, next) => {
+  try {
+    const [[sheet]] = await pool.query(
+      `SELECT status, DATE_FORMAT(closed_at, '%d-%m-%Y') AS closed_on, DATE(closed_at) = CURDATE() AS closed_today
+       FROM trip_sheet WHERE ts_code = ?`,
+      [req.params.code]
+    );
+    if (!sheet) return res.status(404).json({ message: 'Trip sheet not found' });
+    if (sheet.status !== 'Closed') return res.status(400).json({ message: 'Only a closed trip sheet can be reopened' });
+    if (!sheet.closed_today) {
+      return res.status(400).json({ message: `This trip sheet was closed on ${sheet.closed_on}; only a sheet closed today can be reopened` });
+    }
+    await pool.query(
+      "UPDATE trip_sheet SET status = 'Active', closed_at = NULL WHERE ts_code = ? AND status = 'Closed'",
+      [req.params.code]
+    );
+    res.json({ code: Number(req.params.code), status: 'Active' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // A sheet that still has bills (Trip Sheet - Bill Details) can't be cancelled
 router.delete('/:code', async (req, res, next) => {
   try {
