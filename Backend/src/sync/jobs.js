@@ -58,7 +58,8 @@ module.exports = {
     table: 'salesdetails',
     schedule: EVERY_30_MIN,
     intervalMinutes: 30,
-    // Returns the same current list on every call (not a queue like customer), so one call per run
+    // Like customer, each call returns the next batch, so keep calling until it returns nothing
+    loopUntilEmpty: true,
     keys: ['company_code', 'ba_code', 'sm_slno'],
     columns: [
       'company_code', 'ba_code', 'sm_slno', 'cu_code', 'cuc_desc', 'roc_desc', 'smc_no', 'tp_code', 'tpc_desc', 'transporter_type',

@@ -78,7 +78,7 @@ The backend on the server pulls data from `http://192.168.3.24/INVUtility/Servic
 | territory | daily at 06:00 | `territory` |
 | route | daily at 06:00 | `route` |
 | salesexecutive | daily at 06:00 | `salesexecutive` |
-| salesdetails | every 30 minutes (one call; the API returns its current list each time) | `salesdetails` |
+| salesdetails | every 30 minutes; keeps calling until the API returns no rows | `salesdetails` |
 
 - **On restart:** if a job missed its time, for example because the server was off at 06:00, it runs a few seconds after the backend starts.
 - **Run history:** each run is recorded in the `sync_log` table and shown at `http://localhost:5050/api/sync/log` on the server.
