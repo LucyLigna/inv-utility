@@ -161,25 +161,24 @@ export default function TripRouteCustomers() {
     }
   };
 
-  // withSubs false = "Add without sub customers" (new main customer only)
-  const confirmSubs = (withSubs = true) => {
+  // The pop-up's Add button. With nothing ticked, a new main customer is added on its own only after the
+  // user confirms (confirmed = true); for an existing main customer there is nothing to add, so it just warns.
+  const confirmSubs = (confirmed = false) => {
     const subs = [...related.picked.values()];
-    if (withSubs && !subs.length) {
-      setRelated({
-        ...related,
-        warning: related.gi === null
-          ? 'No customer selected. Tick at least one customer to add under it, or choose Add without sub customers.'
-          : 'No customer selected. Tick at least one customer to add as a sub customer.',
-      });
+    if (!subs.length && related.gi !== null) {
+      setRelated({ ...related, warning: 'No customer selected. Tick at least one customer to add as a sub customer.' });
       return;
     }
-    const mainKey = keyOf(related.customer);
+    if (!subs.length && !confirmed) {
+      setRelated({ ...related, askConfirm: true });
+      return;
+    }
     if (related.gi === null) {
-      setGroups((g) => [...g, { main: related.customer, subs: withSubs ? subs : [] }]);
+      setGroups((g) => [...g, { main: related.customer, subs }]);
     } else {
       setGroups((g) => g.map((grp, i) => (i === related.gi ? { ...grp, subs: [...grp.subs, ...subs] } : grp)));
     }
-    if (withSubs) setExpanded((s) => new Set(s).add(mainKey));
+    if (subs.length) setExpanded((s) => new Set(s).add(keyOf(related.customer)));
     setRelated(null);
   };
 
@@ -187,7 +186,7 @@ export default function TripRouteCustomers() {
     const picked = new Map(related.picked);
     if (picked.has(keyOf(c))) picked.delete(keyOf(c));
     else picked.set(keyOf(c), c);
-    setRelated({ ...related, picked, warning: '' });
+    setRelated({ ...related, picked, warning: '', askConfirm: false });
   };
 
   // Search inside the pop-up, for sub customers that don't share the GST number or mobile
@@ -553,11 +552,22 @@ export default function TripRouteCustomers() {
               </DialogContent>
               <DialogActions>
                 <Button onClick={() => setRelated(null)}>Cancel</Button>
-                {isNew && <Button onClick={() => confirmSubs(false)}>Add without sub customers</Button>}
-                <Button variant="contained" onClick={() => confirmSubs(true)}>
-                  {count ? `Add ${count} sub customer${count > 1 ? 's' : ''}` : 'Add sub customers'}
-                </Button>
+                <Button variant="contained" onClick={() => confirmSubs()}>Add</Button>
               </DialogActions>
+
+              {/* Nothing ticked for a new main customer: make sure the user means to add it on its own */}
+              <Dialog open={Boolean(related.askConfirm)} onClose={() => setRelated({ ...related, askConfirm: false })}>
+                <DialogTitle>No sub customer selected</DialogTitle>
+                <DialogContent>
+                  <Typography>
+                    Add <b>{related.customer.cuc_desc}</b> without any sub customers?
+                  </Typography>
+                </DialogContent>
+                <DialogActions>
+                  <Button onClick={() => setRelated({ ...related, askConfirm: false })}>No</Button>
+                  <Button variant="contained" onClick={() => confirmSubs(true)}>Yes, add</Button>
+                </DialogActions>
+              </Dialog>
             </>
           );
         })()}
