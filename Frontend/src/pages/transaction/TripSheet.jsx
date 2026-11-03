@@ -1,4 +1,5 @@
 import MasterScreen from '../../components/MasterScreen';
+import { StatusCell } from '../../components/ListTable';
 
 // '2026-11-03' -> '03-11-2026'
 const showDate = (d) => (d ? d.split('-').reverse().join('-') : '');
@@ -19,7 +20,7 @@ const config = {
   entity: 'Trip Sheet',
   apiPath: '/trip-sheets',
   exportFile: 'trip-sheets',
-  searchFields: ['tsc_no', 'route_name', 'driver_name', 'remarks'],
+  searchFields: ['tsc_no', 'route_name', 'driver_name', 'remarks', 'status'],
   searchPlaceholder: 'Search sheet no, route, driver',
   columns: [
     { label: 'Sheet No', field: 'tsc_no', width: 130 },
@@ -29,7 +30,14 @@ const config = {
     dateColumn('Loading Date', 'loading_date'),
     dateColumn('Start Date', 'start_date'),
     dateColumn('End Date', 'end_date'),
+    { label: 'Status', field: 'status', width: 140, render: (r) => <StatusCell status={r.status} /> },
   ],
+  // Deleting only marks the sheet Cancelled; cancelled sheets stay in the list and can only be viewed
+  deletable: {
+    confirm: (r) => `Cancel trip sheet ${r.tsc_no}? It will stay in the list marked Cancelled and can no longer be edited.`,
+    done: (r) => `Trip sheet ${r.tsc_no} cancelled`,
+  },
+  isLocked: (r) => r.status === 'Cancelled',
   description: 'Trip route, driver, loading and trip dates',
   noStatus: true,
   fields: [

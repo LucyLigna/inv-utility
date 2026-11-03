@@ -94,6 +94,9 @@ CREATE TABLE IF NOT EXISTS trip_sheet (
   start_date   DATE         DEFAULT NULL,
   end_date     DATE         DEFAULT NULL,
   remarks      VARCHAR(500) DEFAULT NULL,
+  -- Deleting a sheet only marks it Cancelled, so its number is never reused
+  status       ENUM('Active','Cancelled') NOT NULL DEFAULT 'Active',
+  cancelled_at DATETIME     DEFAULT NULL,
   inp_dt_tm    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_trip_sheet_no (tsc_no),
   CONSTRAINT fk_trip_sheet_route FOREIGN KEY (trip_code) REFERENCES trip_route (code),

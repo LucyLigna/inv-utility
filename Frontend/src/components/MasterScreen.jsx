@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert, Box, FormControlLabel, MenuItem, Paper, Radio, RadioGroup, Stack, TextField, Typography,
+  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControlLabel, MenuItem,
+  Paper, Radio, RadioGroup, Snackbar, Stack, TextField, Typography,
 } from '@mui/material';
 import {
-  AddCircle, ArrowBack, Close, Download, Edit, Info, Refresh, Save, Visibility,
+  AddCircle, ArrowBack, Close, Delete, Download, Edit, Info, Refresh, Save, Visibility,
 } from '@mui/icons-material';
 import ActionBar from './ActionBar';
 import ListTable from './ListTable';
@@ -35,11 +36,14 @@ const span = (cols) => ({ xs: 'span 12', md: `span ${cols}` });
 //   empty         new-record values (or a function returning them), toForm(row) -> form values for an existing row
 //   renderExtra   optional ({ form, setForm, readOnly }) => extra form controls
 //   validate      optional (form) => error message for the extra controls, or nothing when valid
+//   deletable     optional { confirm(row) -> question, done(row) -> message }: adds a Delete button
+//                 (DELETE apiPath/:code; the server decides what deleting means, e.g. marking it cancelled)
+//   isLocked      optional (row) => true for rows that can only be viewed (e.g. cancelled ones)
 //   searchFields, searchPlaceholder, exportFile
 export default function MasterScreen({ config }) {
   const {
     title, entity, description, apiPath, columns, fields, statusCols, noStatus, empty, toForm, renderExtra, validate,
-    searchFields, searchPlaceholder, exportFile,
+    deletable, isLocked = () => false, searchFields, searchPlaceholder, exportFile,
   } = config;
 
   const [rows, setRows] = useState([]);
@@ -76,6 +80,21 @@ export default function MasterScreen({ config }) {
   }, []);
 
   const selectedRow = rows.find((r) => r.code === selected);
+  const selectedLocked = Boolean(selectedRow) && isLocked(selectedRow);
+  const [confirmDelete, setConfirmDelete] = useState(null); // row waiting for the user to confirm
+  const [notice, setNotice] = useState('');
+
+  const doDelete = async () => {
+    const row = confirmDelete;
+    setConfirmDelete(null);
+    try {
+      await api.delete(`${apiPath}/${row.code}`);
+      await load();
+      setNotice(deletable.done ? deletable.done(row) : `${entity} deleted`);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
 
   const openForm = (nextMode, row) => {
     setForm(row ? toForm(row) : newRecord());
@@ -151,7 +170,12 @@ export default function MasterScreen({ config }) {
     left: [
       { label: 'Add', icon: <AddCircle />, onClick: () => openForm('add', null) },
       { label: 'View', icon: <Visibility />, onClick: () => openForm('view', selectedRow), disabled: !selectedRow },
-      { label: 'Edit', icon: <Edit />, onClick: () => openForm('edit', selectedRow), disabled: !selectedRow },
+      {
+        label: 'Edit', icon: <Edit />, onClick: () => openForm('edit', selectedRow), disabled: !selectedRow || selectedLocked,
+      },
+      ...(deletable ? [{
+        label: 'Delete', icon: <Delete />, onClick: () => setConfirmDelete(selectedRow), disabled: !selectedRow || selectedLocked,
+      }] : []),
       { label: 'Refresh', icon: <Refresh />, onClick: load },
     ],
     right: [
@@ -164,7 +188,7 @@ export default function MasterScreen({ config }) {
   };
   const formActions = mode === 'view'
     ? { left: [
-      { label: 'Edit', icon: <Edit />, onClick: () => setMode('edit') },
+      { label: 'Edit', icon: <Edit />, onClick: () => setMode('edit'), disabled: selectedLocked },
       { label: 'Back', icon: <ArrowBack />, onClick: backToList },
     ] }
     : { left: [
@@ -198,7 +222,7 @@ export default function MasterScreen({ config }) {
               rows={filtered}
               selected={selected}
               onSelect={setSelected}
-              onOpen={(r) => openForm('edit', r)}
+              onOpen={(r) => openForm(isLocked(r) ? 'view' : 'edit', r)}
               emptyText={`No ${entity.toLowerCase()} records found`}
             />
           </>
@@ -215,7 +239,14 @@ export default function MasterScreen({ config }) {
                 1
               </Box>
               <Box>
-                <Typography sx={{ fontSize: 17, fontWeight: 600, color: '#222' }}>{heading}</Typography>
+                <Typography sx={{ fontSize: 17, fontWeight: 600, color: '#222' }}>
+                  {heading}
+                  {mode === 'view' && selectedLocked && selectedRow.status && (
+                    <Box component="span" sx={{ ml: 1, px: 1, py: 0.25, borderRadius: 1, fontSize: 13, bgcolor: '#fdecea', color: '#b3261e' }}>
+                      {selectedRow.status}
+                    </Box>
+                  )}
+                </Typography>
                 <Typography sx={{ fontSize: 14, color: '#666' }}>{description}</Typography>
               </Box>
             </Box>
@@ -296,6 +327,20 @@ export default function MasterScreen({ config }) {
           </Paper>
         )}
       </Box>
+
+      <Dialog open={Boolean(confirmDelete)} onClose={() => setConfirmDelete(null)}>
+        <DialogTitle>Delete {entity}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {confirmDelete && (deletable.confirm ? deletable.confirm(confirmDelete) : `Delete this ${entity.toLowerCase()}?`)}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDelete(null)}>Keep it</Button>
+          <Button color="error" variant="contained" onClick={doDelete}>Delete</Button>
+        </DialogActions>
+      </Dialog>
+      <Snackbar open={Boolean(notice)} autoHideDuration={3000} onClose={() => setNotice('')} message={notice} />
     </Box>
   );
 }
