@@ -271,6 +271,7 @@ CREATE TABLE IF NOT EXISTS salesdetails (
 CREATE OR REPLACE VIEW view_branch_list AS
 SELECT company.company_code, branch.ba_code,
        CONCAT(company.short_code, ' - ', branch.brc_desc) AS company_branch,
+       CONCAT(company.short_code, ' - ', branch.brc_alias) AS company_branch_code,
        company.coc_desc, branch.brc_desc
 FROM branch JOIN company ON company.company_code = branch.company_code;
 
@@ -278,6 +279,7 @@ FROM branch JOIN company ON company.company_code = branch.company_code;
 CREATE OR REPLACE VIEW view_customer_list AS
 SELECT company.coc_desc AS company_name, branch.brc_desc AS branch_name,
        CONCAT(company.short_code, ' - ', branch.brc_desc) AS company_branch,
+       CONCAT(company.short_code, ' - ', branch.brc_alias) AS company_branch_code,
        territory.trc_desc AS terriotry_name, territory.ro_code, route.roc_desc AS route_name, route.se_code,
        salesexecutive.sec_desc AS salesexecutive_name,
        customer.company_code, customer.cu_code, customer.sa_code, customer.cuc_desc, customer.cuc_alias,

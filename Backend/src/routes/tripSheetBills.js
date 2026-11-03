@@ -12,11 +12,12 @@ const CUSTOMER_NAME = "COALESCE(NULLIF(s.cuc_desc, ''), c.cuc_desc, CONCAT('Cust
 // (the nearest 'Main' row above it in Trip Route Wise Customers); otherwise the customer itself.
 const BILL_FIELDS = `s.company_code, s.ba_code, s.sm_slno, s.smc_no, s.cu_code, ${CUSTOMER_NAME} AS cuc_desc, s.net_amount, s.pack_qty,
   s.tpc_desc, s.transporter_type, DATE_FORMAT(s.inp_dt_tm, '%Y-%m-%d %H:%i') AS bill_date, c.cuc_place,
-  COALESCE(b.company_branch, CONCAT(s.company_code, ' - ', COALESCE(b.brc_desc, s.ba_code))) AS company_branch,
+  COALESCE(b.company_branch_code, b.company_branch, CONCAT(s.company_code, ' - ', COALESCE(b.brc_desc, s.ba_code))) AS company_branch,
   rc.route_order, rc.main_sub, rc.group_order,
   CONCAT_WS('|', COALESCE(gm.company_code, s.company_code), COALESCE(gm.ba_code, s.ba_code), COALESCE(gm.cu_code, s.cu_code)) AS group_key,
   COALESCE(gc.cuc_desc, ${CUSTOMER_NAME}) AS group_name,
-  COALESCE(gb.company_branch, b.company_branch, CONCAT(s.company_code, ' - ', s.ba_code)) AS group_branch,
+  COALESCE(gb.company_branch_code, gb.company_branch, b.company_branch_code, b.company_branch,
+    CONCAT(s.company_code, ' - ', s.ba_code)) AS group_branch,
   COALESCE(gc.cuc_place, c.cuc_place) AS group_place`;
 // Two placeholders, both the sheet's trip_code
 const BILL_JOINS = `LEFT JOIN customer c ON c.company_code = s.company_code AND c.ba_code = s.ba_code AND c.cu_code = s.cu_code

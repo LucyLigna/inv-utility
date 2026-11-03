@@ -444,6 +444,7 @@ export default function TripSheetBills() {
                       <TableCell sx={{ ...head, width: 44 }} />
                       <TableCell sx={head}>Bill #</TableCell>
                       <TableCell sx={head}>Customer</TableCell>
+                      <TableCell sx={head}>Company - Branch</TableCell>
                       <TableCell sx={{ ...head, textAlign: 'right' }}>Amount</TableCell>
                       <TableCell sx={{ ...head, textAlign: 'right' }}>Number of cases</TableCell>
                       <TableCell sx={head}>Transporter</TableCell>
@@ -461,6 +462,7 @@ export default function TripSheetBills() {
                           {b.cuc_desc}
                           {b.route_order == null && <Chip size="small" label="Not on route" sx={{ ml: 1, height: 20 }} />}
                         </TableCell>
+                        <TableCell sx={{ ...cell, whiteSpace: 'nowrap' }}>{b.company_branch}</TableCell>
                         <TableCell sx={num}>{money(b.net_amount)}</TableCell>
                         <TableCell sx={num}>{b.pack_qty}</TableCell>
                         <TableCell sx={cell}>{b.tpc_desc}</TableCell>
@@ -469,7 +471,7 @@ export default function TripSheetBills() {
                     ))}
                     {!pickable.length && !loadingBills && (
                       <TableRow>
-                        <TableCell colSpan={7} align="center" sx={{ ...cell, color: '#888' }}>
+                        <TableCell colSpan={8} align="center" sx={{ ...cell, color: '#888' }}>
                           No bills to add. Try other dates, All transport or All customers.
                         </TableCell>
                       </TableRow>
