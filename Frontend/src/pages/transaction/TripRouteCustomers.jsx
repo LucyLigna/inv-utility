@@ -4,7 +4,7 @@ import {
   Paper, Snackbar, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
 import {
-  DeleteOutline, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, Refresh, Save,
+  DeleteOutline, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PersonAddAlt1, PlayArrow, Refresh, Save,
   SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
@@ -54,7 +54,10 @@ export default function TripRouteCustomers() {
   const [expanded, setExpanded] = useState(new Set()); // main customers whose subs are shown
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
-  const [related, setRelated] = useState(null); // { customer, match, value, customers, picked: Set }
+  // Sub-customer pop-up: { customer, gi, match, value, customers, picked: Map key -> customer, warning }
+  const [related, setRelated] = useState(null);
+  const [subSearch, setSubSearch] = useState('');
+  const [subResults, setSubResults] = useState([]);
   const [details, setDetails] = useState(null); // customer shown in the details pop-up
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -122,35 +125,87 @@ export default function TripRouteCustomers() {
     return () => clearTimeout(timer);
   }, [name, place, loaded]);
 
+  // Customers with the same GST number (or mobile) as c, in the route's branches
+  const fetchRelated = (c) => api.get(`/trip-route-customers/${loaded.route.code}/related`, {
+    params: { company_code: c.company_code, ba_code: c.ba_code, cu_code: c.cu_code },
+  }).then(({ data }) => data);
+
+  // The sub-customer pop-up. gi is null when adding a new main customer, or the index of an existing group.
+  const openSubPicker = (customer, gi, data) => {
+    setRelated({ customer, gi, ...data, picked: new Map(), warning: '' });
+    setSubSearch('');
+    setSubResults([]);
+  };
+
   // Picking a search result: offer customers with the same GST number (or mobile) to add under it
   const pick = async (c) => {
     if (inList.has(keyOf(c))) return;
     try {
-      const { data } = await api.get(`/trip-route-customers/${loaded.route.code}/related`, {
-        params: { company_code: c.company_code, ba_code: c.ba_code, cu_code: c.cu_code },
-      });
+      const data = await fetchRelated(c);
       if (!data.customers.length) {
         setGroups((g) => [...g, { main: c, subs: [] }]);
         return;
       }
-      setRelated({ customer: c, ...data, picked: new Set() });
+      openSubPicker(c, null, data);
     } catch (err) {
       setError(errorMessage(err));
     }
   };
 
-  const addWithSubs = () => {
-    const subs = related.customers.filter((c) => related.picked.has(keyOf(c)));
-    setGroups((g) => [...g, { main: related.customer, subs }]);
+  // "Add sub customers" on a main customer already in the list
+  const addSubsTo = async (gi) => {
+    try {
+      openSubPicker(groups[gi].main, gi, await fetchRelated(groups[gi].main));
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
+  // withSubs false = "Add without sub customers" (new main customer only)
+  const confirmSubs = (withSubs = true) => {
+    const subs = [...related.picked.values()];
+    if (withSubs && !subs.length) {
+      setRelated({
+        ...related,
+        warning: related.gi === null
+          ? 'No customer selected. Tick at least one customer to add under it, or choose Add without sub customers.'
+          : 'No customer selected. Tick at least one customer to add as a sub customer.',
+      });
+      return;
+    }
+    const mainKey = keyOf(related.customer);
+    if (related.gi === null) {
+      setGroups((g) => [...g, { main: related.customer, subs: withSubs ? subs : [] }]);
+    } else {
+      setGroups((g) => g.map((grp, i) => (i === related.gi ? { ...grp, subs: [...grp.subs, ...subs] } : grp)));
+    }
+    if (withSubs) setExpanded((s) => new Set(s).add(mainKey));
     setRelated(null);
   };
 
   const togglePicked = (c) => {
-    const picked = new Set(related.picked);
+    const picked = new Map(related.picked);
     if (picked.has(keyOf(c))) picked.delete(keyOf(c));
-    else picked.add(keyOf(c));
-    setRelated({ ...related, picked });
+    else picked.set(keyOf(c), c);
+    setRelated({ ...related, picked, warning: '' });
   };
+
+  // Search inside the pop-up, for sub customers that don't share the GST number or mobile
+  useEffect(() => {
+    if (!related || subSearch.trim().length < 2) {
+      setSubResults([]);
+      return undefined;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/trip-route-customers/${loaded.route.code}/search`, { params: { name: subSearch } });
+        setSubResults(data.filter((c) => keyOf(c) !== keyOf(related.customer)));
+      } catch (err) {
+        setError(errorMessage(err));
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [subSearch, related?.customer]);
 
   const showDetails = async (c) => {
     try {
@@ -252,7 +307,14 @@ export default function TripRouteCustomers() {
             />
           )}
         </TableCell>
-        <TableCell sx={{ ...cell, py: 0, width: 48 }} align="center">
+        <TableCell sx={{ ...cell, py: 0, width: isSub ? 48 : 84, whiteSpace: 'nowrap' }} align="center">
+          {!isSub && (
+            <Tooltip title="Add sub customers">
+              <IconButton size="small" aria-label="add sub customers" onClick={() => addSubsTo(gi)}>
+                <PersonAddAlt1 fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           <Tooltip title={isSub ? 'Remove' : 'Remove with its sub customers'}>
             <IconButton size="small" onClick={() => (isSub ? removeSub(gi, si) : removeMain(gi))}>
               <DeleteOutline fontSize="small" />
@@ -404,66 +466,101 @@ export default function TripRouteCustomers() {
         )}
       </Box>
 
-      {/* Customers with the same GST number / mobile as the picked one */}
+      {/* Sub customers: for a new main customer, or added to one already in the list */}
       <Dialog open={Boolean(related)} onClose={() => setRelated(null)} maxWidth="md" fullWidth>
-        {related && (
-          <>
-            <DialogTitle>
-              Customers with the same {related.match === 'gst' ? 'GST number' : 'mobile number'} ({related.value})
-            </DialogTitle>
-            <DialogContent>
-              <Typography variant="body2" mb={1.5}>
-                <b>{related.customer.cuc_desc}</b> ({related.customer.company_branch}) will be added as the main customer.
-                Tick the customers to list under it.
-              </Typography>
-              <Table size="small" sx={{ borderCollapse: 'collapse' }}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ ...head, width: 48 }} padding="checkbox">
-                      <Checkbox
-                        size="small"
-                        checked={related.customers.filter((c) => !inList.has(keyOf(c))).every((c) => related.picked.has(keyOf(c)))}
-                        onChange={(e) => setRelated({
-                          ...related,
-                          picked: new Set(e.target.checked ? related.customers.filter((c) => !inList.has(keyOf(c))).map(keyOf) : []),
-                        })}
-                      />
-                    </TableCell>
-                    <TableCell sx={head}>Name</TableCell>
-                    <TableCell sx={head}>Place</TableCell>
-                    <TableCell sx={head}>Company - Branch</TableCell>
-                    <TableCell sx={head}>Route</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {related.customers.map((c) => {
-                    const added = inList.has(keyOf(c));
-                    return (
-                      <TableRow key={keyOf(c)} hover={!added} onClick={() => !added && togglePicked(c)} sx={{ cursor: added ? 'default' : 'pointer' }}>
-                        <TableCell sx={cell} padding="checkbox">
-                          <Checkbox size="small" disabled={added} checked={added || related.picked.has(keyOf(c))} />
-                        </TableCell>
-                        <TableCell sx={{ ...cell, color: added ? '#aaa' : 'inherit' }}>
-                          {c.cuc_desc}
-                          {added && <Chip size="small" label="Already in list" sx={{ ml: 1, height: 20 }} />}
-                        </TableCell>
-                        <TableCell sx={cell}>{c.cuc_place}</TableCell>
-                        <TableCell sx={cell}>{c.company_branch}</TableCell>
-                        <TableCell sx={cell}>{c.route_name}</TableCell>
+        {related && (() => {
+          const isNew = related.gi === null;
+          const searching = subSearch.trim().length >= 2;
+          const list = searching ? subResults : related.customers;
+          const selectable = list.filter((c) => !inList.has(keyOf(c)));
+          const count = related.picked.size;
+          const matchLabel = related.match === 'gst' ? 'GST number' : 'mobile number';
+          return (
+            <>
+              <DialogTitle>
+                {isNew ? `Add ${related.customer.cuc_desc}` : `Add sub customers to ${related.customer.cuc_desc}`}
+              </DialogTitle>
+              <DialogContent>
+                <Typography variant="body2" mb={1.5}>
+                  {isNew
+                    ? <><b>{related.customer.cuc_desc}</b> ({related.customer.company_branch}) will be added as the main customer. Tick the customers to list under it.</>
+                    : <>Tick the customers to add under <b>{related.customer.cuc_desc}</b> ({related.customer.company_branch}).</>}
+                </Typography>
+                {related.warning && <Alert severity="warning" sx={{ mb: 1.5 }}>{related.warning}</Alert>}
+                <TextField
+                  size="small"
+                  fullWidth
+                  label="Search other customers"
+                  placeholder="Type a name to find customers that don't share the GST number or mobile"
+                  value={subSearch}
+                  onChange={(e) => setSubSearch(e.target.value)}
+                  sx={{ mb: 1.5 }}
+                />
+                <Typography variant="body2" color="text.secondary" mb={1}>
+                  {searching
+                    ? `${list.length} customers matching "${subSearch.trim()}"`
+                    : related.match
+                      ? `${list.length} customers with the same ${matchLabel} (${related.value})`
+                      : 'This customer has no GST or mobile number to match on. Search above to find sub customers.'}
+                  {count > 0 && <b> · {count} selected</b>}
+                </Typography>
+                <Table size="small" sx={{ borderCollapse: 'collapse' }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ ...head, width: 48 }} padding="checkbox">
+                        <Checkbox
+                          size="small"
+                          disabled={!selectable.length}
+                          checked={selectable.length > 0 && selectable.every((c) => related.picked.has(keyOf(c)))}
+                          onChange={(e) => {
+                            const picked = new Map(related.picked);
+                            selectable.forEach((c) => (e.target.checked ? picked.set(keyOf(c), c) : picked.delete(keyOf(c))));
+                            setRelated({ ...related, picked, warning: '' });
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell sx={head}>Name</TableCell>
+                      <TableCell sx={head}>Place</TableCell>
+                      <TableCell sx={head}>Company - Branch</TableCell>
+                      <TableCell sx={head}>Route</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {list.map((c) => {
+                      const added = inList.has(keyOf(c));
+                      return (
+                        <TableRow key={keyOf(c)} hover={!added} onClick={() => !added && togglePicked(c)} sx={{ cursor: added ? 'default' : 'pointer' }}>
+                          <TableCell sx={cell} padding="checkbox">
+                            <Checkbox size="small" disabled={added} checked={added || related.picked.has(keyOf(c))} />
+                          </TableCell>
+                          <TableCell sx={{ ...cell, color: added ? '#aaa' : 'inherit' }}>
+                            {c.cuc_desc}
+                            {added && <Chip size="small" label="Already in list" sx={{ ml: 1, height: 20 }} />}
+                          </TableCell>
+                          <TableCell sx={cell}>{c.cuc_place}</TableCell>
+                          <TableCell sx={cell}>{c.company_branch}</TableCell>
+                          <TableCell sx={cell}>{c.route_name}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {!list.length && (
+                      <TableRow>
+                        <TableCell colSpan={5} align="center" sx={{ ...cell, color: '#888' }}>No customers to show</TableCell>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setRelated(null)}>Cancel</Button>
-              <Button variant="contained" onClick={addWithSubs}>
-                Add{related.picked.size ? ` with ${related.picked.size} sub customer${related.picked.size > 1 ? 's' : ''}` : ''}
-              </Button>
-            </DialogActions>
-          </>
-        )}
+                    )}
+                  </TableBody>
+                </Table>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setRelated(null)}>Cancel</Button>
+                {isNew && <Button onClick={() => confirmSubs(false)}>Add without sub customers</Button>}
+                <Button variant="contained" onClick={() => confirmSubs(true)}>
+                  {count ? `Add ${count} sub customer${count > 1 ? 's' : ''}` : 'Add sub customers'}
+                </Button>
+              </DialogActions>
+            </>
+          );
+        })()}
       </Dialog>
 
       {/* Details of a customer clicked in the Selected Customer list */}
