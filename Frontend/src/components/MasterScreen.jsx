@@ -31,10 +31,11 @@ const span = (cols) => ({ xs: 'span 12', md: `span ${cols}` });
 //   statusCols    width of the Status field (of 12)
 //   empty         new-record values, toForm(row) -> form values for an existing row
 //   renderExtra   optional ({ form, setForm, readOnly }) => extra form controls
+//   validate      optional (form) => error message for the extra controls, or nothing when valid
 //   searchFields, searchPlaceholder, exportFile
 export default function MasterScreen({ config }) {
   const {
-    title, entity, description, apiPath, columns, fields, statusCols, empty, toForm, renderExtra, searchFields,
+    title, entity, description, apiPath, columns, fields, statusCols, empty, toForm, renderExtra, validate, searchFields,
     searchPlaceholder, exportFile,
   } = config;
 
@@ -98,6 +99,11 @@ export default function MasterScreen({ config }) {
     const missing = fields.filter((f) => f.required && !String(form[f.name] || '').trim());
     if (missing.length) {
       setFormError(`${missing.map((f) => f.label).join(' and ')} required`);
+      return;
+    }
+    const extraError = validate && validate(form);
+    if (extraError) {
+      setFormError(extraError);
       return;
     }
     if (hasFieldErrors) return;

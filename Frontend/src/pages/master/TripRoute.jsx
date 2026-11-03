@@ -22,7 +22,7 @@ function BranchPicker({ form, setForm, readOnly }) {
   }, []);
 
   return (
-    <FormSection title="Branches" hint="Select the branches this route serves.">
+    <FormSection title="Branches *" hint="Select the branches this route serves (at least one).">
       <Autocomplete
         multiple
         disableCloseOnSelect
@@ -77,7 +77,7 @@ function WeekdayPicker({ form, setForm, readOnly }) {
     setForm({ ...form, weekdays });
   };
   return (
-    <FormSection title="Weekdays" hint="Tick the days this route runs.">
+    <FormSection title="Weekdays *" hint="Tick the days this route runs (at least one).">
       <Stack direction="row" alignItems="center" flexWrap="wrap" columnGap={1}>
         {WEEKDAYS.map((d) => (
           <FormControlLabel
@@ -131,6 +131,11 @@ const config = {
     branches: r.branches || [],
     status: r.status,
   }),
+  validate: (form) => {
+    if (!form.weekdays.length) return 'Select at least one weekday';
+    if (!form.branches.length) return 'Select at least one branch';
+    return null;
+  },
   renderExtra: (props) => (
     <>
       <WeekdayPicker {...props} />

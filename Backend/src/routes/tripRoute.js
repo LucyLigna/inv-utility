@@ -22,6 +22,7 @@ function validate(body) {
   if (!name) return { error: 'Route name is required' };
   if (!shortCode) return { error: 'Short code is required' };
   if (shortCode.length > 10) return { error: 'Short code can be at most 10 characters' };
+  if (!weekdays) return { error: 'Select at least one weekday' };
   if (!STATUSES.includes(status)) return { error: 'Status must be Active or Inactive' };
   return { name, short_code: shortCode, weekdays, status };
 }
@@ -69,7 +70,7 @@ async function validBranches(list) {
   const picked = (Array.isArray(list) ? list : [])
     .map((b) => ({ company_code: String(b.company_code || '').trim(), ba_code: String(b.ba_code || '').trim() }))
     .filter((b) => b.company_code && b.ba_code);
-  if (!picked.length) return { branches: [] };
+  if (!picked.length) return { error: 'Select at least one branch' };
   const [rows] = await pool.query(
     'SELECT company_code, ba_code FROM view_branch_list WHERE (company_code, ba_code) IN (?)',
     [picked.map((b) => [b.company_code, b.ba_code])]
