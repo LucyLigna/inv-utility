@@ -205,6 +205,25 @@ CREATE TABLE IF NOT EXISTS salesexecutive (
   UNIQUE KEY salesexe_secdesc_uk (company_code, sec_desc)
 );
 
+CREATE TABLE IF NOT EXISTS salesdetails (
+  company_code     VARCHAR(3)    NOT NULL,
+  ba_code          VARCHAR(4)    NOT NULL,
+  sm_slno          VARCHAR(10)   NOT NULL,
+  cu_code          VARCHAR(8)    DEFAULT NULL,
+  smc_no           VARCHAR(20)   DEFAULT NULL,
+  tp_code          VARCHAR(4)    DEFAULT NULL,
+  tpc_desc         VARCHAR(40)   DEFAULT NULL,
+  transporter_type VARCHAR(20)   DEFAULT NULL,
+  net_amount       DECIMAL(12,2) DEFAULT NULL,
+  pack_qty         INT           DEFAULT NULL,
+  eway_billno      VARCHAR(20)   DEFAULT NULL,
+  checked_ok       VARCHAR(1)    DEFAULT NULL,
+  printed          VARCHAR(3)    DEFAULT NULL,
+  inp_dt_tm        DATETIME      DEFAULT NULL,
+  PRIMARY KEY (company_code, ba_code, sm_slno),
+  KEY idx_salesdetails_cu (company_code, ba_code, cu_code)
+);
+
 -- Branch picker list: 'BAD - CAL UNIT I' (company short code - branch name)
 CREATE OR REPLACE VIEW view_branch_list AS
 SELECT company.company_code, branch.ba_code,

@@ -53,6 +53,18 @@ module.exports = {
       'emc_alias', 'ba_code',
     ],
   },
+  salesdetails: {
+    url: `${BASE_URL}/salesdetails`,
+    table: 'salesdetails',
+    schedule: EVERY_30_MIN,
+    intervalMinutes: 30,
+    // Returns the same current list on every call (not a queue like customer), so one call per run
+    keys: ['company_code', 'ba_code', 'sm_slno'],
+    columns: [
+      'company_code', 'ba_code', 'sm_slno', 'cu_code', 'smc_no', 'tp_code', 'tpc_desc', 'transporter_type',
+      'net_amount', 'pack_qty', 'eway_billno', 'checked_ok', 'printed', 'inp_dt_tm',
+    ],
+  },
   customer: {
     url: `${BASE_URL}/customer`,
     table: 'customer',
