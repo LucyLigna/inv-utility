@@ -22,6 +22,7 @@ const FOREIGN_KEYS = {
     'CONSTRAINT `fk_trip_sheet_route` FOREIGN KEY (`trip_code`) REFERENCES `trip_route` (`code`)',
     'CONSTRAINT `fk_trip_sheet_driver` FOREIGN KEY (`driver_code`) REFERENCES `driver` (`code`)',
   ],
+  trip_sheet_bills: ['CONSTRAINT `fk_trip_sheet_bills_sheet` FOREIGN KEY (`ts_code`) REFERENCES `trip_sheet` (`ts_code`)'],
 };
 const referencedTable = (fk) => fk.match(/REFERENCES `(\w+)`/)[1];
 

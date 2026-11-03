@@ -97,10 +97,27 @@ CREATE TABLE IF NOT EXISTS trip_sheet (
   -- Deleting a sheet only marks it Cancelled, so its number is never reused
   status       ENUM('Active','Cancelled') NOT NULL DEFAULT 'Active',
   cancelled_at DATETIME     DEFAULT NULL,
+  -- Totals of the bills in trip_sheet_bills, updated when the bill details are saved
+  total_bills    INT        NOT NULL DEFAULT 0,
+  total_pack_qty INT        NOT NULL DEFAULT 0,
   inp_dt_tm    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_trip_sheet_no (tsc_no),
   CONSTRAINT fk_trip_sheet_route FOREIGN KEY (trip_code) REFERENCES trip_route (code),
   CONSTRAINT fk_trip_sheet_driver FOREIGN KEY (driver_code) REFERENCES driver (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Bills (from salesdetails) carried on a trip sheet. A bill can be on only one Active trip sheet.
+CREATE TABLE IF NOT EXISTS trip_sheet_bills (
+  ts_code      INT           NOT NULL,
+  company_code VARCHAR(3)    NOT NULL,
+  ba_code      VARCHAR(4)    NOT NULL,
+  sm_slno      VARCHAR(10)   NOT NULL,
+  pack_qty     INT           DEFAULT NULL,
+  amount       DECIMAL(12,2) DEFAULT NULL,
+  created_at   TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (ts_code, company_code, ba_code, sm_slno),
+  KEY ix_trip_sheet_bills_bill (company_code, ba_code, sm_slno),
+  CONSTRAINT fk_trip_sheet_bills_sheet FOREIGN KEY (ts_code) REFERENCES trip_sheet (ts_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT IGNORE INTO sys_menufile (menu_code, name, sort_order) VALUES
@@ -112,7 +129,8 @@ INSERT IGNORE INTO sys_programfile (program_code, menu_code, name, route, sort_o
   ('P0102', 'M01', 'Driver', '/master/driver', 2),
   ('P0103', 'M01', 'Trip Route', '/master/trip-route', 3),
   ('P0201', 'M02', 'Trip Route Wise Customers', '/transaction/trip-route-customers', 1),
-  ('P0202', 'M02', 'Trip Sheet', '/transaction/trip-sheet', 2);
+  ('P0202', 'M02', 'Trip Sheet', '/transaction/trip-sheet', 2),
+  ('P0203', 'M02', 'Trip Sheet - Bill Details', '/transaction/trip-sheet-bills', 3);
 
 -- ---------------------------------------------------------------------------
 -- Data pulled from the INV API (192.168.3.24) by the scheduler in src/sync

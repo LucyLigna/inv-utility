@@ -261,6 +261,8 @@ CREATE TABLE IF NOT EXISTS `trip_sheet` (
   `remarks` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `status` enum('Active','Cancelled') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Active',
   `cancelled_at` datetime DEFAULT NULL,
+  `total_bills` int NOT NULL DEFAULT '0',
+  `total_pack_qty` int NOT NULL DEFAULT '0',
   `inp_dt_tm` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`ts_code`),
   UNIQUE KEY `uq_trip_sheet_no` (`tsc_no`),
@@ -268,6 +270,20 @@ CREATE TABLE IF NOT EXISTS `trip_sheet` (
   KEY `fk_trip_sheet_driver` (`driver_code`),
   CONSTRAINT `fk_trip_sheet_driver` FOREIGN KEY (`driver_code`) REFERENCES `driver` (`code`),
   CONSTRAINT `fk_trip_sheet_route` FOREIGN KEY (`trip_code`) REFERENCES `trip_route` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- trip_sheet_bills
+CREATE TABLE IF NOT EXISTS `trip_sheet_bills` (
+  `ts_code` int NOT NULL,
+  `company_code` varchar(3) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `ba_code` varchar(4) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `sm_slno` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `pack_qty` int DEFAULT NULL,
+  `amount` decimal(12,2) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`ts_code`,`company_code`,`ba_code`,`sm_slno`),
+  KEY `ix_trip_sheet_bills_bill` (`company_code`,`ba_code`,`sm_slno`),
+  CONSTRAINT `fk_trip_sheet_bills_sheet` FOREIGN KEY (`ts_code`) REFERENCES `trip_sheet` (`ts_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- vehiclenumber
@@ -299,4 +315,5 @@ INSERT IGNORE INTO `sys_programfile` (`program_code`, `menu_code`, `name`, `rout
   ('P0102', 'M01', 'Driver', '/master/driver', 2, 'Active'),
   ('P0103', 'M01', 'Trip Route', '/master/trip-route', 3, 'Active'),
   ('P0201', 'M02', 'Trip Route Wise Customers', '/transaction/trip-route-customers', 1, 'Active'),
-  ('P0202', 'M02', 'Trip Sheet', '/transaction/trip-sheet', 2, 'Active');
+  ('P0202', 'M02', 'Trip Sheet', '/transaction/trip-sheet', 2, 'Active'),
+  ('P0203', 'M02', 'Trip Sheet - Bill Details', '/transaction/trip-sheet-bills', 3, 'Active');

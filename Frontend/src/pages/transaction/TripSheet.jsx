@@ -30,6 +30,8 @@ const config = {
     dateColumn('Loading Date', 'loading_date'),
     dateColumn('Start Date', 'start_date'),
     dateColumn('End Date', 'end_date'),
+    { label: 'Bills', field: 'total_bills', width: 80, align: 'right' },
+    { label: 'Cases', field: 'total_pack_qty', width: 80, align: 'right' },
     { label: 'Status', field: 'status', width: 140, render: (r) => <StatusCell status={r.status} /> },
   ],
   // Deleting only marks the sheet Cancelled; cancelled sheets stay in the list and can only be viewed

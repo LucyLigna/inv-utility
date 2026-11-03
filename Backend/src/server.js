@@ -13,6 +13,7 @@ app.use('/api/vehicles', require('./routes/vehicle'));
 app.use('/api/drivers', require('./routes/driver'));
 app.use('/api/trip-routes', require('./routes/tripRoute'));
 app.use('/api/trip-sheets', require('./routes/tripSheet'));
+app.use('/api/trip-sheet-bills', require('./routes/tripSheetBills'));
 app.use('/api/trip-route-customers',require('./routes/tripRouteCustomers'));
 app.use('/api/sync',require('./routes/sync'));
 
