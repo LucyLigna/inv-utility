@@ -8,6 +8,7 @@ import {
   SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
+import { useConfirm } from '../../components/ConfirmDialog';
 import api, { errorMessage } from '../../api';
 
 const BLUE = '#1a35b0';
@@ -62,6 +63,7 @@ export default function TripRouteCustomers() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const dragRef = useRef(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   useEffect(() => {
     api.get('/trip-routes')
@@ -72,10 +74,14 @@ export default function TripRouteCustomers() {
   const inList = new Set(toRows(groups).map(keyOf));
   const dirty = Boolean(loaded) && snapshot(groups) !== savedKey;
 
-  const confirmDiscard = () => !dirty || window.confirm('Discard the unsaved changes to this route?');
+  const confirmDiscard = async () => !dirty || confirm({
+    message: "Any changes you've made to this route will be lost. This can't be undone.",
+    cancelLabel: 'Keep editing',
+    confirmLabel: 'Discard',
+  });
 
   const process = async (r = route) => {
-    if (!r || !confirmDiscard()) return;
+    if (!r || !(await confirmDiscard())) return;
     try {
       const { data } = await api.get(`/trip-route-customers/${r.code}`);
       const g = toGroups(data.customers);
@@ -162,17 +168,19 @@ export default function TripRouteCustomers() {
   };
 
   // The pop-up's Add button. With nothing ticked, a new main customer is added on its own only after the
-  // user confirms (confirmed = true); for an existing main customer there is nothing to add, so it just warns.
-  const confirmSubs = (confirmed = false) => {
+  // user confirms; for an existing main customer there is nothing to add, so it just warns.
+  const confirmSubs = async () => {
     const subs = [...related.picked.values()];
     if (!subs.length && related.gi !== null) {
       setRelated({ ...related, warning: 'No customer selected. Tick at least one customer to add as a sub customer.' });
       return;
     }
-    if (!subs.length && !confirmed) {
-      setRelated({ ...related, askConfirm: true });
-      return;
-    }
+    if (!subs.length && !(await confirm({
+      title: 'No sub customer selected',
+      message: <>Add <b>{related.customer.cuc_desc}</b> without any sub customers?</>,
+      cancelLabel: 'No',
+      confirmLabel: 'Yes, add',
+    }))) return;
     if (related.gi === null) {
       setGroups((g) => [...g, { main: related.customer, subs }]);
     } else {
@@ -186,7 +194,7 @@ export default function TripRouteCustomers() {
     const picked = new Map(related.picked);
     if (picked.has(keyOf(c))) picked.delete(keyOf(c));
     else picked.set(keyOf(c), c);
-    setRelated({ ...related, picked, warning: '', askConfirm: false });
+    setRelated({ ...related, picked, warning: '' });
   };
 
   // Search inside the pop-up, for sub customers that don't share the GST number or mobile
@@ -554,20 +562,6 @@ export default function TripRouteCustomers() {
                 <Button onClick={() => setRelated(null)}>Cancel</Button>
                 <Button variant="contained" onClick={() => confirmSubs()}>Add</Button>
               </DialogActions>
-
-              {/* Nothing ticked for a new main customer: make sure the user means to add it on its own */}
-              <Dialog open={Boolean(related.askConfirm)} onClose={() => setRelated({ ...related, askConfirm: false })}>
-                <DialogTitle>No sub customer selected</DialogTitle>
-                <DialogContent>
-                  <Typography>
-                    Add <b>{related.customer.cuc_desc}</b> without any sub customers?
-                  </Typography>
-                </DialogContent>
-                <DialogActions>
-                  <Button onClick={() => setRelated({ ...related, askConfirm: false })}>No</Button>
-                  <Button variant="contained" onClick={() => confirmSubs(true)}>Yes, add</Button>
-                </DialogActions>
-              </Dialog>
             </>
           );
         })()}
@@ -604,6 +598,7 @@ export default function TripRouteCustomers() {
         )}
       </Dialog>
 
+      {confirmDialog}
       <Snackbar open={Boolean(notice)} autoHideDuration={3000} onClose={() => setNotice('')} message={notice} />
     </Box>
   );

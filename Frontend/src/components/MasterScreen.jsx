@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControlLabel, MenuItem,
-  Paper, Radio, RadioGroup, Snackbar, Stack, TextField, Typography,
+  Alert, Box, FormControlLabel, MenuItem, Paper, Radio, RadioGroup, Snackbar, Stack, TextField, Typography,
 } from '@mui/material';
 import {
   AddCircle, ArrowBack, Close, Delete, Download, Edit, Info, Refresh, Save, Visibility,
 } from '@mui/icons-material';
 import ActionBar from './ActionBar';
+import ConfirmDialog from './ConfirmDialog';
 import ListTable from './ListTable';
 import api, { errorMessage } from '../api';
 
@@ -328,18 +328,15 @@ export default function MasterScreen({ config }) {
         )}
       </Box>
 
-      <Dialog open={Boolean(confirmDelete)} onClose={() => setConfirmDelete(null)}>
-        <DialogTitle>Delete {entity}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            {confirmDelete && (deletable.confirm ? deletable.confirm(confirmDelete) : `Delete this ${entity.toLowerCase()}?`)}
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDelete(null)}>Keep it</Button>
-          <Button color="error" variant="contained" onClick={doDelete}>Delete</Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={Boolean(confirmDelete)}
+        title={`Delete ${entity}?`}
+        message={confirmDelete && (deletable.confirm ? deletable.confirm(confirmDelete) : `Delete this ${entity.toLowerCase()}?`)}
+        cancelLabel="Keep it"
+        confirmLabel="Delete"
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={doDelete}
+      />
       <Snackbar open={Boolean(notice)} autoHideDuration={3000} onClose={() => setNotice('')} message={notice} />
     </Box>
   );
