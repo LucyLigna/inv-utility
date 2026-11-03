@@ -9,6 +9,8 @@ const pool = require('../config/db');
 const OUT_FILE = path.join(__dirname, '..', '..', '..', 'deploy', 'invutility-create.sql');
 // Tables whose rows are part of the set-up (the menu); everything else starts empty
 const DATA_TABLES = ['sys_menufile', 'sys_programfile'];
+// Every table and the database use this collation
+const COLLATION = 'utf8mb4_unicode_ci';
 
 // Foreign keys from schema.sql. A MyISAM table drops them silently, so they are added here when the live
 // table doesn't show them; every table in the script is created as InnoDB, which keeps them.
@@ -45,10 +47,6 @@ function orderByForeignKeys(tables, refs) {
 
 async function main() {
   const [[{ db }]] = await pool.query('SELECT DATABASE() AS db');
-  const [[schema]] = await pool.query(
-    'SELECT DEFAULT_CHARACTER_SET_NAME cs, DEFAULT_COLLATION_NAME co FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?',
-    [db]
-  );
   const [objects] = await pool.query(
     'SELECT TABLE_NAME name, TABLE_TYPE type FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME',
     [db]
@@ -71,7 +69,9 @@ async function main() {
     '-- Run it as a user that may create databases, e.g.:  mysql -u root -p < invutility-create.sql',
     '-- Safe to run again: existing tables and rows are left as they are.',
     '',
-    `CREATE DATABASE IF NOT EXISTS \`${db}\` CHARACTER SET ${schema.cs} COLLATE ${schema.co};`,
+    `CREATE DATABASE IF NOT EXISTS \`${db}\` CHARACTER SET utf8mb4 COLLATE ${COLLATION};`,
+    '-- In case the database already existed with the server default collation',
+    `ALTER DATABASE \`${db}\` CHARACTER SET utf8mb4 COLLATE ${COLLATION};`,
     `USE \`${db}\`;`,
     '',
   ];
@@ -81,7 +81,9 @@ async function main() {
     const sql = row['Create Table']
       .replace(/^CREATE TABLE/, 'CREATE TABLE IF NOT EXISTS')
       .replace(/ AUTO_INCREMENT=\d+/, '') // start numbering from 1 on the new server
-      .replace(/ ENGINE=\w+/, ' ENGINE=InnoDB'); // transactions and foreign keys need InnoDB
+      .replace(/ ENGINE=\w+/, ' ENGINE=InnoDB') // transactions and foreign keys need InnoDB
+      // one collation everywhere; mixing them breaks joins ("Illegal mix of collations")
+      .replaceAll(/utf8mb4_0900_ai_ci/g, COLLATION);
     out.push(`-- ${t}`, `${withForeignKeys(t, sql)};`, '');
   }
 
