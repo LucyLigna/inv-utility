@@ -68,7 +68,7 @@ export default function TripSheetBills() {
   const [sheet, setSheet] = useState(null); // sheet loaded by Process
   const [selected, setSelected] = useState(new Map()); // bill key -> bill
   const [savedKey, setSavedKey] = useState('');
-  const [collapsed, setCollapsed] = useState(new Set()); // customer groups whose bills are hidden
+  const [expanded, setExpanded] = useState(new Set()); // customer groups whose bills are shown; none by default
   const [customOrder, setCustomOrder] = useState(null); // group keys in the user's order; null = route order
   const [dragKey, setDragKey] = useState(null);
   const [customers, setCustomers] = useState('route'); // route | all
@@ -110,7 +110,7 @@ export default function TripSheetBills() {
       setSelected(map);
       setCustomOrder(order);
       setSavedKey(snapshot(map, order));
-      setCollapsed(new Set());
+      setExpanded(new Set());
       // Bill dates default to the sheet's loading date
       setFromDate(data.sheet.loading_date || '');
       setToDate(data.sheet.loading_date || '');
@@ -181,8 +181,8 @@ export default function TripSheetBills() {
   };
   const totals = groups.reduce((t, g) => ({ bills: t.bills + g.bills.length, cases: t.cases + g.cases, amount: t.amount + g.amount }),
     { bills: 0, cases: 0, amount: 0 });
-  const allCollapsed = groups.length > 0 && groups.every((g) => collapsed.has(g.key));
-  const toggleGroup = (key) => setCollapsed((s) => {
+  const allExpanded = groups.length > 0 && groups.every((g) => expanded.has(g.key));
+  const toggleGroup = (key) => setExpanded((s) => {
     const next = new Set(s);
     if (next.has(key)) next.delete(key);
     else next.add(key);
@@ -260,10 +260,10 @@ export default function TripSheetBills() {
                   {groups.length > 0 && (
                     <Button
                       size="small"
-                      startIcon={allCollapsed ? <UnfoldMore /> : <UnfoldLess />}
-                      onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(groups.map((g) => g.key)))}
+                      startIcon={allExpanded ? <UnfoldLess /> : <UnfoldMore />}
+                      onClick={() => setExpanded(allExpanded ? new Set() : new Set(groups.map((g) => g.key)))}
                     >
-                      {allCollapsed ? 'Show bills' : 'Hide bills'}
+                      {allExpanded ? 'Hide bills' : 'Show bills'}
                     </Button>
                   )}
                 </Box>
@@ -287,7 +287,7 @@ export default function TripSheetBills() {
                   </TableHead>
                   <TableBody>
                     {groups.map((g) => {
-                      const open = !collapsed.has(g.key);
+                      const open = expanded.has(g.key);
                       return [
                         <TableRow
                           key={g.key}
