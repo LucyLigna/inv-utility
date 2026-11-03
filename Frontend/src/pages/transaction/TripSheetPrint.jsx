@@ -27,9 +27,33 @@ const packs = (bills, branch) => bills
   .reduce((sum, b) => sum + (Number(b.pack_qty) || 0), 0);
 const amount = (bills) => bills.reduce((sum, b) => sum + (Number(b.net_amount) || 0), 0);
 
+const branchesOf = (bills) => [...new Set(bills.map((b) => b.company_branch))].sort();
+
+// The customer summary as an .xlsx file: the same table as the "Summary by branch" print
+export async function exportSummaryExcel(sheet, groups) {
+  const { default: writeExcelFile } = await import('write-excel-file/browser');
+  const allBills = groups.flatMap((g) => g.bills);
+  const branches = branchesOf(allBills);
+  const bold = (value) => ({ value, fontWeight: 'bold' });
+  const data = [
+    [bold(`Trip Sheet ${sheet.tsc_no}`)],
+    [`Route: ${sheet.route_name}`, null, `Loading: ${showDate(sheet.loading_date)} (${sheet.loading_day})`, null, `Driver: ${sheet.driver_name}`],
+    [],
+    [bold('Sl #'), bold('Customer'), bold('Place'), ...branches.map(bold), bold('Total')],
+    ...groups.map((g, i) => [
+      i + 1, g.name, g.place || null, ...branches.map((br) => packs(g.bills, br) || null), packs(g.bills),
+    ]),
+    [bold('Total'), null, null, ...branches.map((br) => bold(packs(allBills, br))), bold(packs(allBills))],
+  ];
+  await writeExcelFile(data, {
+    sheet: sheet.tsc_no,
+    columns: [{ width: 6 }, { width: 40 }, { width: 22 }, ...branches.map(() => ({ width: 12 })), { width: 10 }],
+  }).toFile(`${sheet.tsc_no} customer summary.xlsx`);
+}
+
 // Summary: one row per customer with its cases (pack qty) per company - branch
 function BranchSummary({ groups, allBills }) {
-  const branches = [...new Set(allBills.map((b) => b.company_branch))].sort();
+  const branches = branchesOf(allBills);
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
       <colgroup>

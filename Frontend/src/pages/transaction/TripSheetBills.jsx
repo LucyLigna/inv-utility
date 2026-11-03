@@ -4,12 +4,12 @@ import {
   TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import {
-  AddCircleOutline, CloudDownload, DeleteOutline, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, PlaylistAdd, Refresh,
+  AddCircleOutline, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, PlaylistAdd, Refresh,
   Save, Sort, SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
 import { useConfirm } from '../../components/ConfirmDialog';
-import TripSheetPrint from './TripSheetPrint';
+import TripSheetPrint, { exportSummaryExcel } from './TripSheetPrint';
 import api, { errorMessage } from '../../api';
 
 const BORDER = '1px solid #d5d8e0';
@@ -222,6 +222,24 @@ export default function TripSheetBills() {
     setTimeout(() => window.print(), 150); // after the chosen layout has rendered
   };
 
+  // Downloads the customer summary (cases per customer and company - branch) as Excel; saves changes first
+  const exportExcel = async () => {
+    if (dirty) {
+      const ok = await confirm({
+        title: 'Save before exporting?',
+        message: 'This trip sheet has changes that are not saved yet. They will be saved, then the summary is exported.',
+        cancelLabel: 'Cancel',
+        confirmLabel: 'Save and export',
+      });
+      if (!ok || !(await save())) return;
+    }
+    try {
+      await exportSummaryExcel(sheet, groups);
+    } catch (err) {
+      setError(`Could not export: ${errorMessage(err)}`);
+    }
+  };
+
   const routeSorted = byCustomer([...selected.values()]);
   const groups = arrange(routeSorted, customOrder);
   const inRouteOrder = groups.every((g, i) => g.key === routeSorted[i].key);
@@ -258,6 +276,9 @@ export default function TripSheetBills() {
             onClick: getLatestBills,
             disabled: syncing,
           },
+        ]}
+        right={[
+          { label: 'Export Excel', icon: <Download />, onClick: exportExcel, disabled: !sheet || !groups.length },
         ]}
       />
       <Box sx={{ p: 2.5 }}>
