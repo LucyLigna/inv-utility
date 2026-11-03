@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert, Autocomplete, Box, Button, Checkbox, Chip, Paper, Snackbar, Table, TableBody, TableCell, TableContainer,
-  TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Typography,
+  Alert, Autocomplete, Box, Button, Chip, IconButton, Paper, Snackbar, Table, TableBody, TableCell, TableContainer,
+  TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
-import { PlayArrow, Refresh, Save } from '@mui/icons-material';
+import {
+  AddCircleOutline, DeleteOutline, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, PlaylistAdd, Refresh, Save,
+  SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
+} from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
 import { useConfirm } from '../../components/ConfirmDialog';
 import api, { errorMessage } from '../../api';
@@ -12,32 +15,34 @@ const BORDER = '1px solid #d5d8e0';
 const cell = { border: BORDER, px: 1.5, py: 0.75, fontSize: 14 };
 const head = { ...cell, fontWeight: 700, bgcolor: '#f5f6fa', color: '#111' };
 const num = { ...cell, textAlign: 'right', whiteSpace: 'nowrap' };
+const dateSx = { width: 160, '& input': { py: 1 } };
 
 const billKey = (b) => `${b.company_code}|${b.ba_code}|${b.sm_slno}`;
-const customerKey = (b) => `${b.company_code}|${b.ba_code}|${b.cu_code}`;
 const money = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const showDate = (d) => (d ? d.split('-').reverse().join('-') : '');
+const showDateTime = (d) => (d ? `${showDate(d.slice(0, 10))} ${d.slice(11)}` : '');
 const sheetLabel = (s) => `${s.tsc_no} · ${s.route_name} · ${showDate(s.loading_date)} (${(s.loading_day || '').slice(0, 3)})`;
 const snapshot = (map) => JSON.stringify([...map.keys()].sort());
 
-// Selected bills grouped per customer, in the route's visiting order (customers not on the route last)
+// Selected bills grouped under their main customer (a sub customer's bills go under its main customer on the
+// route), in the route's visiting order; customers not on the route come last
 function byCustomer(bills) {
   const groups = new Map();
   for (const b of bills) {
-    const k = customerKey(b);
-    if (!groups.has(k)) {
-      groups.set(k, {
-        key: k, cuc_desc: b.cuc_desc, company_branch: b.company_branch, cuc_place: b.cuc_place,
-        route_order: b.route_order, cases: 0, bills: 0, amount: 0,
+    if (!groups.has(b.group_key)) {
+      groups.set(b.group_key, {
+        key: b.group_key, name: b.group_name, company_branch: b.group_branch, place: b.group_place,
+        order: b.group_order, onRoute: b.route_order != null, bills: [], cases: 0, amount: 0,
       });
     }
-    const g = groups.get(k);
+    const g = groups.get(b.group_key);
+    g.bills.push(b);
     g.cases += Number(b.pack_qty) || 0;
-    g.bills += 1;
     g.amount += Number(b.net_amount) || 0;
   }
-  return [...groups.values()].sort((a, b) => (a.route_order ?? 1e9) - (b.route_order ?? 1e9)
-    || String(a.cuc_desc).localeCompare(String(b.cuc_desc)));
+  const list = [...groups.values()].sort((a, b) => (a.order ?? 1e9) - (b.order ?? 1e9) || String(a.name).localeCompare(String(b.name)));
+  list.forEach((g) => g.bills.sort((a, b) => (a.route_order ?? 1e9) - (b.route_order ?? 1e9) || String(a.smc_no).localeCompare(String(b.smc_no))));
+  return list;
 }
 
 export default function TripSheetBills() {
@@ -46,8 +51,11 @@ export default function TripSheetBills() {
   const [sheet, setSheet] = useState(null); // sheet loaded by Process
   const [selected, setSelected] = useState(new Map()); // bill key -> bill
   const [savedKey, setSavedKey] = useState('');
+  const [collapsed, setCollapsed] = useState(new Set()); // customer groups whose bills are hidden
   const [customers, setCustomers] = useState('route'); // route | all
   const [transport, setTransport] = useState('own'); // own | all
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [search, setSearch] = useState('');
   const [available, setAvailable] = useState([]);
   const [loadingBills, setLoadingBills] = useState(false);
@@ -68,7 +76,7 @@ export default function TripSheetBills() {
   const process = async (s = picked) => {
     if (!s) return;
     if (dirty && !(await confirm({
-      message: "Any bills you've ticked or unticked on this trip sheet will be lost. This can't be undone.",
+      message: "Any bills you've added or removed on this trip sheet will be lost. This can't be undone.",
       cancelLabel: 'Keep editing',
       confirmLabel: 'Discard',
     }))) return;
@@ -78,20 +86,24 @@ export default function TripSheetBills() {
       setSheet(data.sheet);
       setSelected(map);
       setSavedKey(snapshot(map));
+      setCollapsed(new Set());
+      // Bill dates default to the sheet's loading date
+      setFromDate(data.sheet.loading_date || '');
+      setToDate(data.sheet.loading_date || '');
       setError('');
     } catch (err) {
       setError(errorMessage(err));
     }
   };
 
-  // Bills that can be picked, reloaded when the sheet or a filter changes
+  // Bills that can be added, reloaded when the sheet or a filter changes
   useEffect(() => {
     if (!sheet) return undefined;
     const timer = setTimeout(async () => {
       setLoadingBills(true);
       try {
         const { data } = await api.get(`/trip-sheet-bills/${sheet.code}/available`, {
-          params: { customers, transport, search },
+          params: { customers, transport, search, from: fromDate, to: toDate },
         });
         setAvailable(data);
       } catch (err) {
@@ -101,18 +113,19 @@ export default function TripSheetBills() {
       }
     }, search ? 350 : 0);
     return () => clearTimeout(timer);
-  }, [sheet, customers, transport, search]);
+  }, [sheet, customers, transport, search, fromDate, toDate]);
 
-  const toggle = (b) => setSelected((m) => {
+  // Bills already on this sheet are shown on the left only
+  const pickable = available.filter((b) => !selected.has(billKey(b)));
+
+  const addBills = (bills) => setSelected((m) => {
     const next = new Map(m);
-    if (next.has(billKey(b))) next.delete(billKey(b));
-    else next.set(billKey(b), b);
+    bills.forEach((b) => next.set(billKey(b), b));
     return next;
   });
-  const allTicked = available.length > 0 && available.every((b) => selected.has(billKey(b)));
-  const toggleAll = () => setSelected((m) => {
+  const removeBills = (bills) => setSelected((m) => {
     const next = new Map(m);
-    available.forEach((b) => (allTicked ? next.delete(billKey(b)) : next.set(billKey(b), b)));
+    bills.forEach((b) => next.delete(billKey(b)));
     return next;
   });
 
@@ -130,8 +143,15 @@ export default function TripSheetBills() {
   };
 
   const groups = byCustomer([...selected.values()]);
-  const totals = groups.reduce((t, g) => ({ bills: t.bills + g.bills, cases: t.cases + g.cases, amount: t.amount + g.amount }),
+  const totals = groups.reduce((t, g) => ({ bills: t.bills + g.bills.length, cases: t.cases + g.cases, amount: t.amount + g.amount }),
     { bills: 0, cases: 0, amount: 0 });
+  const allCollapsed = groups.length > 0 && groups.every((g) => collapsed.has(g.key));
+  const toggleGroup = (key) => setCollapsed((s) => {
+    const next = new Set(s);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
 
   return (
     <Box>
@@ -187,13 +207,24 @@ export default function TripSheetBills() {
         </Box>
 
         {sheet && (
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '5fr 7fr' }, gap: 2.5, alignItems: 'start' }}>
-            {/* Left: the ticked bills, totalled per customer */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '6fr 6fr' }, gap: 2.5, alignItems: 'start' }}>
+            {/* Left: bills on the sheet, under their (main) customer */}
             <Paper variant="outlined" sx={{ p: 2 }}>
-              <Typography sx={{ fontWeight: 700, mb: 1 }}>
-                Selected Customer ({groups.length})
-                {dirty && <Box component="span" sx={{ color: '#c77700', fontWeight: 400 }}> · not saved</Box>}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Typography sx={{ fontWeight: 700 }}>
+                  Selected Customer ({groups.length})
+                  {dirty && <Box component="span" sx={{ color: '#c77700', fontWeight: 400 }}> · not saved</Box>}
+                </Typography>
+                {groups.length > 0 && (
+                  <Button
+                    size="small"
+                    startIcon={allCollapsed ? <UnfoldMore /> : <UnfoldLess />}
+                    onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(groups.map((g) => g.key)))}
+                  >
+                    {allCollapsed ? 'Show bills' : 'Hide bills'}
+                  </Button>
+                )}
+              </Box>
               <TableContainer sx={{ maxHeight: 'calc(100vh - 340px)' }}>
                 <Table stickyHeader size="small" sx={{ borderCollapse: 'collapse' }}>
                   <TableHead>
@@ -203,25 +234,60 @@ export default function TripSheetBills() {
                       <TableCell sx={head}>Place</TableCell>
                       <TableCell sx={{ ...head, textAlign: 'right' }}>Number of cases</TableCell>
                       <TableCell sx={{ ...head, textAlign: 'right' }}>Number of bills</TableCell>
+                      <TableCell sx={{ ...head, width: 44 }} />
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {groups.map((g) => (
-                      <TableRow key={g.key} hover>
-                        <TableCell sx={{ ...cell, fontWeight: 600 }}>
-                          {g.cuc_desc}
-                          {g.route_order == null && <Chip size="small" label="Not on route" sx={{ ml: 1, height: 20 }} />}
-                        </TableCell>
-                        <TableCell sx={cell}>{g.company_branch}</TableCell>
-                        <TableCell sx={cell}>{g.cuc_place}</TableCell>
-                        <TableCell sx={num}>{g.cases}</TableCell>
-                        <TableCell sx={num}>{g.bills}</TableCell>
-                      </TableRow>
-                    ))}
+                    {groups.map((g) => {
+                      const open = !collapsed.has(g.key);
+                      return [
+                        <TableRow key={g.key} hover sx={{ bgcolor: '#f8f9fc' }}>
+                          <TableCell sx={{ ...cell, fontWeight: 700 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <IconButton size="small" sx={{ p: 0.25 }} onClick={() => toggleGroup(g.key)} aria-label={open ? 'hide bills' : 'show bills'}>
+                                {open ? <KeyboardArrowDown fontSize="small" /> : <KeyboardArrowRight fontSize="small" />}
+                              </IconButton>
+                              {g.name}
+                              {!g.onRoute && <Chip size="small" label="Not on route" sx={{ ml: 0.5, height: 20, fontWeight: 400 }} />}
+                            </Box>
+                          </TableCell>
+                          <TableCell sx={cell}>{g.company_branch}</TableCell>
+                          <TableCell sx={cell}>{g.place}</TableCell>
+                          <TableCell sx={{ ...num, fontWeight: 700 }}>{g.cases}</TableCell>
+                          <TableCell sx={{ ...num, fontWeight: 700 }}>{g.bills.length}</TableCell>
+                          <TableCell sx={{ ...cell, py: 0 }} align="center">
+                            <Tooltip title="Remove all bills of this customer">
+                              <IconButton size="small" onClick={() => removeBills(g.bills)}><DeleteOutline fontSize="small" /></IconButton>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>,
+                        ...(open ? g.bills.map((b) => (
+                          <TableRow key={billKey(b)} hover>
+                            <TableCell sx={{ ...cell, pl: 5 }} colSpan={2}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                <SubdirectoryArrowRight fontSize="small" sx={{ color: '#9aa0ab' }} />
+                                <b>{b.smc_no}</b>
+                                <Box component="span" sx={{ color: '#666', fontSize: 13 }}>{showDateTime(b.bill_date)}</Box>
+                                {b.cuc_desc !== g.name && <Box component="span" sx={{ fontSize: 13 }}>· {b.cuc_desc}</Box>}
+                                {b.company_branch !== g.company_branch && <Box component="span" sx={{ color: '#666', fontSize: 13 }}>({b.company_branch})</Box>}
+                              </Box>
+                            </TableCell>
+                            <TableCell sx={{ ...num, color: '#444' }}>₹ {money(b.net_amount)}</TableCell>
+                            <TableCell sx={num}>{b.pack_qty}</TableCell>
+                            <TableCell sx={num}>1</TableCell>
+                            <TableCell sx={{ ...cell, py: 0 }} align="center">
+                              <Tooltip title="Remove this bill">
+                                <IconButton size="small" onClick={() => removeBills([b])}><DeleteOutline fontSize="small" /></IconButton>
+                              </Tooltip>
+                            </TableCell>
+                          </TableRow>
+                        )) : []),
+                      ];
+                    })}
                     {!groups.length && (
                       <TableRow>
-                        <TableCell colSpan={5} align="center" sx={{ ...cell, color: '#888' }}>
-                          No bills selected. Tick bills on the right.
+                        <TableCell colSpan={6} align="center" sx={{ ...cell, color: '#888' }}>
+                          No bills on this trip sheet yet. Click bills on the right to add them.
                         </TableCell>
                       </TableRow>
                     )}
@@ -234,6 +300,7 @@ export default function TripSheetBills() {
                         </TableCell>
                         <TableCell sx={{ ...head, ...num, fontWeight: 700, position: 'sticky', bottom: 0 }}>{totals.cases}</TableCell>
                         <TableCell sx={{ ...head, ...num, fontWeight: 700, position: 'sticky', bottom: 0 }}>{totals.bills}</TableCell>
+                        <TableCell sx={{ ...head, position: 'sticky', bottom: 0 }} />
                       </TableRow>
                     </TableFooter>
                   )}
@@ -241,10 +308,20 @@ export default function TripSheetBills() {
               </TableContainer>
             </Paper>
 
-            {/* Right: bills to pick from */}
+            {/* Right: bills to add; ones already on the sheet are not shown */}
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap', mb: 1.5 }}>
                 <Typography sx={{ fontWeight: 700, mr: 'auto' }}>Bills</Typography>
+                <TextField
+                  type="date" size="small" label="Bill date from" value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={dateSx}
+                />
+                <TextField
+                  type="date" size="small" label="Bill date to" value={toDate}
+                  onChange={(e) => setToDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={dateSx}
+                />
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap', mb: 1.5 }}>
                 <ToggleButtonGroup size="small" exclusive value={transport} onChange={(e, v) => v && setTransport(v)}>
                   <ToggleButton value="own">Own</ToggleButton>
                   <ToggleButton value="all">All</ToggleButton>
@@ -253,19 +330,20 @@ export default function TripSheetBills() {
                   <ToggleButton value="route">Route customers</ToggleButton>
                   <ToggleButton value="all">All customers</ToggleButton>
                 </ToggleButtonGroup>
-                <TextField size="small" placeholder="Bill no or customer" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ width: 200 }} />
+                <TextField size="small" placeholder="Bill no or customer" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ flex: 1, minWidth: 160 }} />
+                <Button size="small" startIcon={<PlaylistAdd />} disabled={!pickable.length} onClick={() => addBills(pickable)}>
+                  Add all
+                </Button>
               </Box>
               <Typography variant="body2" color="text.secondary" mb={1}>
-                {loadingBills ? 'Loading…' : `${available.length} bills ${transport === 'own' ? '(own transport)' : ''} for ${
-                  customers === 'route' ? 'customers on this route' : "all customers in the route's branches"}. Bills already on another trip sheet are not listed.`}
+                {loadingBills ? 'Loading…' : `${pickable.length} bills${transport === 'own' ? ' (own transport)' : ''} for ${
+                  customers === 'route' ? 'customers on this route' : "all customers in the route's branches"}. Click a bill to add it.`}
               </Typography>
-              <TableContainer sx={{ maxHeight: 'calc(100vh - 380px)' }}>
+              <TableContainer sx={{ maxHeight: 'calc(100vh - 420px)' }}>
                 <Table stickyHeader size="small" sx={{ borderCollapse: 'collapse' }}>
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ ...head, width: 44 }} padding="checkbox">
-                        <Checkbox size="small" checked={allTicked} disabled={!available.length} onChange={toggleAll} />
-                      </TableCell>
+                      <TableCell sx={{ ...head, width: 44 }} />
                       <TableCell sx={head}>Bill #</TableCell>
                       <TableCell sx={head}>Customer</TableCell>
                       <TableCell sx={{ ...head, textAlign: 'right' }}>Amount</TableCell>
@@ -275,27 +353,26 @@ export default function TripSheetBills() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {available.map((b) => {
-                      const on = selected.has(billKey(b));
-                      return (
-                        <TableRow key={billKey(b)} hover onClick={() => toggle(b)} sx={{ cursor: 'pointer', bgcolor: on ? '#eef2fd' : 'inherit' }}>
-                          <TableCell sx={cell} padding="checkbox"><Checkbox size="small" checked={on} /></TableCell>
-                          <TableCell sx={{ ...cell, whiteSpace: 'nowrap' }}>{b.smc_no}</TableCell>
-                          <TableCell sx={cell}>
-                            {b.cuc_desc}
-                            {b.route_order == null && <Chip size="small" label="Not on route" sx={{ ml: 1, height: 20 }} />}
-                          </TableCell>
-                          <TableCell sx={num}>{money(b.net_amount)}</TableCell>
-                          <TableCell sx={num}>{b.pack_qty}</TableCell>
-                          <TableCell sx={cell}>{b.tpc_desc}</TableCell>
-                          <TableCell sx={cell}>{b.transporter_type}</TableCell>
-                        </TableRow>
-                      );
-                    })}
-                    {!available.length && !loadingBills && (
+                    {pickable.map((b) => (
+                      <TableRow key={billKey(b)} hover onClick={() => addBills([b])} sx={{ cursor: 'pointer' }}>
+                        <TableCell sx={{ ...cell, py: 0 }} align="center">
+                          <AddCircleOutline fontSize="small" sx={{ color: '#1a35b0', verticalAlign: 'middle' }} />
+                        </TableCell>
+                        <TableCell sx={{ ...cell, whiteSpace: 'nowrap' }}>{b.smc_no}</TableCell>
+                        <TableCell sx={cell}>
+                          {b.cuc_desc}
+                          {b.route_order == null && <Chip size="small" label="Not on route" sx={{ ml: 1, height: 20 }} />}
+                        </TableCell>
+                        <TableCell sx={num}>{money(b.net_amount)}</TableCell>
+                        <TableCell sx={num}>{b.pack_qty}</TableCell>
+                        <TableCell sx={cell}>{b.tpc_desc}</TableCell>
+                        <TableCell sx={cell}>{b.transporter_type}</TableCell>
+                      </TableRow>
+                    ))}
+                    {!pickable.length && !loadingBills && (
                       <TableRow>
                         <TableCell colSpan={7} align="center" sx={{ ...cell, color: '#888' }}>
-                          No bills found. Try All transport or All customers.
+                          No bills to add. Try other dates, All transport or All customers.
                         </TableCell>
                       </TableRow>
                     )}
