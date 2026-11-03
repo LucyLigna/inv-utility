@@ -264,8 +264,8 @@ CREATE TABLE IF NOT EXISTS `trip_sheet` (
   UNIQUE KEY `uq_trip_sheet_no` (`tsc_no`),
   KEY `fk_trip_sheet_route` (`trip_code`),
   KEY `fk_trip_sheet_driver` (`driver_code`),
-  CONSTRAINT `fk_trip_sheet_route` FOREIGN KEY (`trip_code`) REFERENCES `trip_route` (`code`),
-  CONSTRAINT `fk_trip_sheet_driver` FOREIGN KEY (`driver_code`) REFERENCES `driver` (`code`)
+  CONSTRAINT `fk_trip_sheet_driver` FOREIGN KEY (`driver_code`) REFERENCES `driver` (`code`),
+  CONSTRAINT `fk_trip_sheet_route` FOREIGN KEY (`trip_code`) REFERENCES `trip_route` (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- vehiclenumber
