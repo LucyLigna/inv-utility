@@ -27,7 +27,8 @@ npm ci --omit=dev
 if ($LASTEXITCODE -ne 0) { throw 'Backend npm install failed' }
 Pop-Location
 
-Copy-Item (Join-Path $PSScriptRoot 'setup-iis.ps1'), (Join-Path $PSScriptRoot 'README.md') $pkg
+Copy-Item (Join-Path $PSScriptRoot 'setup-iis.ps1'), (Join-Path $PSScriptRoot 'README.md'),
+  (Join-Path $PSScriptRoot 'invutility-create.sql') $pkg
 
 Compress-Archive -Path $pkg -DestinationPath (Join-Path $out 'InvUtility.zip')
 Write-Host "Package ready: $(Join-Path $out 'InvUtility.zip')"

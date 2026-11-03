@@ -4,7 +4,7 @@ const pool = require('../config/db');
 const router = express.Router();
 const NO_PREFIX = 'TS-';
 const NO_DIGITS = 6;
-
+ 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const day = (col) => `DATE_FORMAT(s.${col}, '%Y-%m-%d') AS ${col}`;
 

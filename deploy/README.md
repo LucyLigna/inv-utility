@@ -29,6 +29,23 @@ Install these on the IIS server, in this order:
 
 The server must also be able to reach MySQL at `192.168.3.49:3306`, and `erp_user` must be allowed to log in from the server's IP.
 
+### Database on a new MySQL server
+
+`invutility-create.sql` (in the package and in `deploy\`) creates the `invutility` database with every table, both views and the menu rows. All tables are InnoDB. It is safe to run again; existing tables and rows are kept.
+
+```powershell
+mysql -u root -p < invutility-create.sql
+```
+
+Then give the application's user access, and point `backend\.env` (`DB_HOST`, `DB_USER`, `DB_PASSWORD`) at that server:
+
+```sql
+CREATE USER 'erp_user'@'%' IDENTIFIED BY '<password>';
+GRANT ALL PRIVILEGES ON invutility.* TO 'erp_user'@'%';
+```
+
+The synced tables (company, branch, customer, ...) start empty and fill from the INV API on the first scheduler runs. After changing the database structure, regenerate the script on a development PC with `npm run db:script` in `Backend`.
+
 ## 3. Install or update (on the server)
 
 Extract `InvUtility.zip`, open **PowerShell as Administrator** in the extracted `InvUtility` folder, and run:

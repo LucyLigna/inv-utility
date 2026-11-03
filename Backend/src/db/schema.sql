@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS sys_menufile (
   status      ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
   created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
+) ENGINE=InnoDB;
 
 -- Lowest level menu items (programs/screens) under a main menu
 CREATE TABLE IF NOT EXISTS sys_programfile (
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS sys_programfile (
   created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_program_menu FOREIGN KEY (menu_code) REFERENCES sys_menufile (menu_code)
-);
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS vehiclenumber (
   code        INT          NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS vehiclenumber (
   created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_vehicle_number (number)
-);
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS driver (
   code        INT          NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS driver (
   updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_driver_name (name),
   UNIQUE KEY uq_driver_short_code (short_code)
-);
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS trip_route (
   code        INT          NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS trip_route (
   updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_trip_route_name (name),
   UNIQUE KEY uq_trip_route_short_code (short_code)
-);
+) ENGINE=InnoDB;
 
 -- Branches a trip route serves. Unticking a branch marks it Inactive rather than deleting it.
 CREATE TABLE IF NOT EXISTS trip_route_branches (
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS trip_route_branches (
   updated_at   TIMESTAMP  NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (trip_code, company_code, ba_code),
   CONSTRAINT fk_trip_route_branches_route FOREIGN KEY (trip_code) REFERENCES trip_route (code)
-);
+) ENGINE=InnoDB;
 
 -- Customers on a trip route, in visiting order. A 'Sub' row belongs to the nearest 'Main' row above it
 -- (customers with the same GST number or mobile, grouped under one main customer).
@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS trip_route_customers (
   PRIMARY KEY (trip_code, company_code, ba_code, cu_code),
   KEY ix_trip_route_customers_order (trip_code, sort_order),
   CONSTRAINT fk_trip_route_customers_route FOREIGN KEY (trip_code) REFERENCES trip_route (code)
-);
+) ENGINE=InnoDB;
 
 -- Trip sheets. tsc_no is the document number, generated on save as TS-000001, TS-000002, ...
 CREATE TABLE IF NOT EXISTS trip_sheet (
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS trip_sheet (
   UNIQUE KEY uq_trip_sheet_no (tsc_no),
   CONSTRAINT fk_trip_sheet_route FOREIGN KEY (trip_code) REFERENCES trip_route (code),
   CONSTRAINT fk_trip_sheet_driver FOREIGN KEY (driver_code) REFERENCES driver (code)
-);
+) ENGINE=InnoDB;
 
 INSERT IGNORE INTO sys_menufile (menu_code, name, sort_order) VALUES
   ('M01', 'Master', 1),
@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS company (
   -- Kept locally; not part of the INV API data, so the daily sync leaves it alone
   short_code   VARCHAR(10) DEFAULT NULL,
   PRIMARY KEY (company_code)
-);
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS branch (
   company_code VARCHAR(3)  NOT NULL,
@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS branch (
   PRIMARY KEY (company_code, ba_code),
   UNIQUE KEY branch_brcdesc_uk (company_code, brc_desc),
   UNIQUE KEY branch_brcalias_uk (company_code, brc_alias)
-);
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS customer (
   company_code    VARCHAR(3)    NOT NULL,
@@ -180,7 +180,7 @@ CREATE TABLE IF NOT EXISTS customer (
   PRIMARY KEY (company_code, ba_code, cu_code),
   UNIQUE KEY customer_cucalias_uk (company_code, ba_code, cuc_alias),
   UNIQUE KEY customer_cucdesc_uk (company_code, ba_code, cuc_desc)
-);
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS territory (
   company_code VARCHAR(3)  NOT NULL,
@@ -194,7 +194,7 @@ CREATE TABLE IF NOT EXISTS territory (
   PRIMARY KEY (company_code, tr_code),
   UNIQUE KEY territory_trcdesc_uk (company_code, trc_desc),
   UNIQUE KEY territory_trcalias_uk (company_code, trc_alias)
-);
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS route (
   company_code VARCHAR(3)  NOT NULL,
@@ -208,7 +208,7 @@ CREATE TABLE IF NOT EXISTS route (
   PRIMARY KEY (company_code, ro_code),
   UNIQUE KEY route_rocdesc_uk (company_code, roc_desc),
   UNIQUE KEY route_rocalias_uk (company_code, roc_alias)
-);
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS salesexecutive (
   company_code   VARCHAR(3)  NOT NULL,
@@ -224,7 +224,7 @@ CREATE TABLE IF NOT EXISTS salesexecutive (
   PRIMARY KEY (company_code, se_code),
   UNIQUE KEY salesexe_secalias_uk (company_code, sec_alias),
   UNIQUE KEY salesexe_secdesc_uk (company_code, sec_desc)
-);
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS salesdetails (
   company_code     VARCHAR(3)    NOT NULL,
@@ -245,7 +245,7 @@ CREATE TABLE IF NOT EXISTS salesdetails (
   inp_dt_tm        DATETIME      DEFAULT NULL,
   PRIMARY KEY (company_code, ba_code, sm_slno),
   KEY idx_salesdetails_cu (company_code, ba_code, cu_code)
-);
+) ENGINE=InnoDB;
 
 -- Branch picker list: 'BAD - CAL UNIT I' (company short code - branch name)
 CREATE OR REPLACE VIEW view_branch_list AS
@@ -284,7 +284,7 @@ CREATE TABLE IF NOT EXISTS sync_log (
   row_count   INT          NOT NULL DEFAULT 0,
   message     VARCHAR(1000) DEFAULT NULL,
   KEY ix_sync_log_job (job, started_at)
-);
+) ENGINE=InnoDB;
 
 -- Rows the scheduler could not save (kept so data the API has already handed out is never lost)
 CREATE TABLE IF NOT EXISTS sync_failed_row (
@@ -293,4 +293,4 @@ CREATE TABLE IF NOT EXISTS sync_failed_row (
   payload    JSON          NOT NULL,
   error      VARCHAR(1000) NOT NULL,
   created_at TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+) ENGINE=InnoDB;
