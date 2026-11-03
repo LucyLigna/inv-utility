@@ -86,6 +86,8 @@ $siteConfig = Join-Path $siteDir 'web.config'
 # --- IIS -------------------------------------------------------------------------
 Write-Host 'Enabling ARR proxy...'
 Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/proxy' -Name 'enabled' -Value 'True'
+# The default 30-second proxy timeout is too short for "Get Latest Bills", which runs the customer sync
+Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/proxy' -Name 'timeout' -Value '00:10:00'
 
 foreach ($pool in $SiteName, $ApiSiteName) {
   if (-not (Test-Path "IIS:\AppPools\$pool")) {

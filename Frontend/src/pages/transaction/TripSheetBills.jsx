@@ -4,7 +4,7 @@ import {
   TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import {
-  AddCircleOutline, DeleteOutline, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, PlaylistAdd, Refresh,
+  AddCircleOutline, CloudDownload, DeleteOutline, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, PlaylistAdd, Refresh,
   Save, Sort, SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
@@ -80,6 +80,8 @@ export default function TripSheetBills() {
   const [loadingBills, setLoadingBills] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0); // bump to reload the bills list
   const [confirm, confirmDialog] = useConfirm();
 
   const loadSheets = () => api.get('/trip-sheet-bills/sheets')
@@ -137,7 +139,29 @@ export default function TripSheetBills() {
       }
     }, search ? 350 : 0);
     return () => clearTimeout(timer);
-  }, [sheet, customers, transport, search, fromDate, toDate]);
+  }, [sheet, customers, transport, search, fromDate, toDate, reloadKey]);
+
+  // Runs the customer and salesdetails syncs now (instead of waiting for the half-hourly schedule),
+  // then reloads the bills list
+  const getLatestBills = async () => {
+    setSyncing(true);
+    setError('');
+    const summary = [];
+    try {
+      for (const [job, label] of [['customer', 'customers'], ['salesdetails', 'bills']]) {
+        const { data } = await api.post(`/sync/${job}/run`);
+        if (data.skipped) summary.push(`${label}: already being fetched by the scheduler`);
+        else if (data.status === 'Failed') summary.push(`${label}: failed (${data.message || 'see the sync log'})`);
+        else summary.push(`${data.saved} ${label} received`);
+      }
+      setNotice(`Latest data fetched: ${summary.join(', ')}`);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(`Could not fetch the latest bills: ${errorMessage(err)}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // Bills already on this sheet are shown on the left only
   const pickable = available.filter((b) => !selected.has(billKey(b)));
@@ -195,6 +219,12 @@ export default function TripSheetBills() {
         left={[
           { label: 'Save', icon: <Save />, onClick: save, disabled: !dirty },
           { label: 'Refresh', icon: <Refresh />, onClick: () => process(sheet), disabled: !sheet },
+          {
+            label: syncing ? 'Getting latest bills…' : 'Get Latest Bills',
+            icon: <CloudDownload />,
+            onClick: getLatestBills,
+            disabled: syncing,
+          },
         ]}
       />
       <Box sx={{ p: 2.5 }}>
