@@ -38,7 +38,9 @@ const span = (cols) => ({ xs: 'span 12', md: `span ${cols}` });
 //   validate      optional (form) => error message for the extra controls, or nothing when valid
 //   deletable     optional { confirm(row) -> question, done(row) -> message }: adds a Delete button
 //                 (DELETE apiPath/:code; the server decides what deleting means, e.g. marking it cancelled)
+//                 deletable.blockedReason(row) -> message when the row can't be deleted yet, shown instead of asking
 //   isLocked      optional (row) => true for rows that can only be viewed (e.g. cancelled ones)
+//   A field with lockOnEdit: true can be filled in when adding but not changed when editing
 //   searchFields, searchPlaceholder, exportFile
 export default function MasterScreen({ config }) {
   const {
@@ -174,7 +176,14 @@ export default function MasterScreen({ config }) {
         label: 'Edit', icon: <Edit />, onClick: () => openForm('edit', selectedRow), disabled: !selectedRow || selectedLocked,
       },
       ...(deletable ? [{
-        label: 'Delete', icon: <Delete />, onClick: () => setConfirmDelete(selectedRow), disabled: !selectedRow || selectedLocked,
+        label: 'Delete',
+        icon: <Delete />,
+        onClick: () => {
+          const reason = deletable.blockedReason && deletable.blockedReason(selectedRow);
+          if (reason) setError(reason);
+          else setConfirmDelete(selectedRow);
+        },
+        disabled: !selectedRow || selectedLocked,
       }] : []),
       { label: 'Refresh', icon: <Refresh />, onClick: load },
     ],
@@ -259,6 +268,7 @@ export default function MasterScreen({ config }) {
               {formError && <Alert severity="error" sx={{ gridColumn: 'span 12' }}>{formError}</Alert>}
               {fields.map((f) => {
                 const auto = f.type === 'auto';
+                const fixed = auto || (f.lockOnEdit && Boolean(editCode)); // shown greyed, can't be changed
                 const choices = f.type === 'select'
                   ? (options[f.name] || []).filter((o) => o.status === 'Active' || o.code === form[f.name])
                   : null;
@@ -276,14 +286,15 @@ export default function MasterScreen({ config }) {
                     onChange={(e) => changeField(f, e.target.value)}
                     onBlur={() => checkDuplicate(f)}
                     error={Boolean(fieldErrors[f.name])}
-                    helperText={fieldErrors[f.name]}
+                    helperText={fieldErrors[f.name] || (fixed && !auto && !readOnly ? f.lockedHint : undefined)}
                     InputLabelProps={f.type === 'date' || auto ? { shrink: true } : undefined}
-                    InputProps={{ readOnly: readOnly || auto }}
+                    InputProps={{ readOnly: readOnly || fixed }}
+                    SelectProps={fixed ? { IconComponent: () => null } : undefined}
                     inputProps={{ maxLength: f.maxLength }}
                     sx={{
                       ...FIELD_SX,
                       gridColumn: span(f.cols || 4),
-                      ...(auto && { '& .MuiOutlinedInput-root': { bgcolor: '#f5f6fa' } }),
+                      ...(fixed && { '& .MuiOutlinedInput-root': { bgcolor: '#f5f6fa' } }),
                       ...(auto && !form[f.name] && { '& .MuiOutlinedInput-input': { color: '#888', fontWeight: 400 } }),
                     }}
                   >

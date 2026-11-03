@@ -108,12 +108,17 @@ router.put('/:code', async (req, res, next) => {
   const r = validate(req.body);
   if (r.error) return res.status(400).json({ message: r.error });
   try {
+    // The trip route is fixed once the sheet is saved (its bills are picked from that route's customers)
+    const [[current]] = await pool.query('SELECT trip_code FROM trip_sheet WHERE ts_code = ?', [req.params.code]);
+    if (current && current.trip_code !== r.trip_code) {
+      return res.status(400).json({ message: 'The trip route of a saved trip sheet cannot be changed' });
+    }
     const linkError = await checkLinks(r, Number(req.params.code));
     if (linkError) return res.status(400).json({ message: linkError });
     const [result] = await pool.query(
-      `UPDATE trip_sheet SET entry_date = ?, trip_code = ?, driver_code = ?, loading_date = ?, start_date = ?,
+      `UPDATE trip_sheet SET entry_date = ?, driver_code = ?, loading_date = ?, start_date = ?,
          end_date = ?, remarks = ? WHERE ts_code = ? AND status = 'Active'`,
-      [r.entry_date, r.trip_code, r.driver_code, r.loading_date, r.start_date, r.end_date, r.remarks, req.params.code]
+      [r.entry_date, r.driver_code, r.loading_date, r.start_date, r.end_date, r.remarks, req.params.code]
     );
     if (!result.affectedRows) return res.status(404).json({ message: 'Trip sheet not found or already cancelled' });
     res.json({ code: Number(req.params.code), ...r });
@@ -123,8 +128,15 @@ router.put('/:code', async (req, res, next) => {
 });
 
 // Delete = mark the sheet Cancelled; the row and its number stay
+// A sheet that still has bills (Trip Sheet - Bill Details) can't be cancelled
 router.delete('/:code', async (req, res, next) => {
   try {
+    const [[bills]] = await pool.query('SELECT COUNT(*) AS n FROM trip_sheet_bills WHERE ts_code = ?', [req.params.code]);
+    if (bills.n) {
+      return res.status(400).json({
+        message: `This trip sheet has ${bills.n} bill${bills.n > 1 ? 's' : ''}. Remove them in Trip Sheet - Bill Details before deleting it.`,
+      });
+    }
     const [result] = await pool.query(
       "UPDATE trip_sheet SET status = 'Cancelled', cancelled_at = NOW() WHERE ts_code = ? AND status = 'Active'",
       [req.params.code]

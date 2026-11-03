@@ -38,6 +38,9 @@ const config = {
   deletable: {
     confirm: (r) => `Cancel trip sheet ${r.tsc_no}? It will stay in the list marked Cancelled and can no longer be edited.`,
     done: (r) => `Trip sheet ${r.tsc_no} cancelled`,
+    blockedReason: (r) => (r.total_bills > 0
+      ? `Trip sheet ${r.tsc_no} has ${r.total_bills} bill${r.total_bills > 1 ? 's' : ''}. Remove them in Trip Sheet - Bill Details before deleting it.`
+      : null),
   },
   isLocked: (r) => r.status === 'Cancelled',
   description: 'Trip route, driver, loading and trip dates',
@@ -53,6 +56,8 @@ const config = {
       cols: 6,
       optionsPath: '/trip-routes',
       optionLabel: (r) => `${r.name} (${r.short_code})`,
+      lockOnEdit: true,
+      lockedHint: 'The trip route of a saved trip sheet cannot be changed',
     },
     {
       name: 'driver_code',
