@@ -94,9 +94,11 @@ CREATE TABLE IF NOT EXISTS trip_sheet (
   start_date   DATE         DEFAULT NULL,
   end_date     DATE         DEFAULT NULL,
   remarks      VARCHAR(500) DEFAULT NULL,
-  -- Deleting a sheet only marks it Cancelled, so its number is never reused
-  status       ENUM('Active','Cancelled') NOT NULL DEFAULT 'Active',
+  -- Deleting a sheet only marks it Cancelled, so its number is never reused.
+  -- Closed: the trip is done; the sheet and its bills can no longer be changed.
+  status       ENUM('Active','Cancelled','Closed') NOT NULL DEFAULT 'Active',
   cancelled_at DATETIME     DEFAULT NULL,
+  closed_at    DATETIME     DEFAULT NULL,
   -- Totals of the bills in trip_sheet_bills, updated when the bill details are saved
   total_bills    INT        NOT NULL DEFAULT 0,
   total_pack_qty INT        NOT NULL DEFAULT 0,
@@ -106,7 +108,7 @@ CREATE TABLE IF NOT EXISTS trip_sheet (
   CONSTRAINT fk_trip_sheet_driver FOREIGN KEY (driver_code) REFERENCES driver (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Bills (from salesdetails) carried on a trip sheet. A bill can be on only one Active trip sheet.
+-- Bills (from salesdetails) carried on a trip sheet. A bill can be on only one trip sheet that isn't Cancelled.
 CREATE TABLE IF NOT EXISTS trip_sheet_bills (
   ts_code      INT           NOT NULL,
   company_code VARCHAR(3)    NOT NULL,

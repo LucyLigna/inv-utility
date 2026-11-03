@@ -96,7 +96,7 @@ router.get('/:tsCode', async (req, res, next) => {
   }
 });
 
-// Bills that can go on the sheet: not on another Active trip sheet.
+// Bills that can go on the sheet: not on another trip sheet (Active or Closed; a Cancelled sheet frees its bills).
 //   ?customers=route (default: customers on the sheet's route) | all (every bill in the route's branches)
 //   &transport=own (default: transporter_type Own) | all   &search=bill no or customer name
 //   &from=YYYY-MM-DD&to=YYYY-MM-DD   bill date range (either may be left out)
@@ -112,7 +112,7 @@ router.get('/:tsCode/available', async (req, res, next) => {
     if (!sheet) return res.status(404).json({ message: 'Trip sheet not found' });
     const where = [
       `NOT EXISTS (SELECT 1 FROM trip_sheet_bills tb JOIN trip_sheet ts ON ts.ts_code = tb.ts_code
-         WHERE ts.status = 'Active' AND tb.ts_code <> ? AND tb.company_code = s.company_code
+         WHERE ts.status <> 'Cancelled' AND tb.ts_code <> ? AND tb.company_code = s.company_code
            AND tb.ba_code = s.ba_code AND tb.sm_slno = s.sm_slno)`,
     ];
     const params = [sheet.trip_code, sheet.trip_code, sheet.code];
@@ -169,7 +169,7 @@ router.put('/:tsCode', async (req, res, next) => {
     }
     if (sheet.status !== 'Active') {
       await conn.rollback();
-      return res.status(400).json({ message: 'This trip sheet is cancelled' });
+      return res.status(400).json({ message: `This trip sheet is ${sheet.status.toLowerCase()}; its bills can no longer be changed` });
     }
     let bills = [];
     if (keys.length) {
@@ -185,7 +185,7 @@ router.put('/:tsCode', async (req, res, next) => {
         `SELECT s.smc_no, ts.tsc_no FROM trip_sheet_bills tb
          JOIN trip_sheet ts ON ts.ts_code = tb.ts_code
          JOIN salesdetails s ON s.company_code = tb.company_code AND s.ba_code = tb.ba_code AND s.sm_slno = tb.sm_slno
-         WHERE ts.status = 'Active' AND tb.ts_code <> ? AND (tb.company_code, tb.ba_code, tb.sm_slno) IN (?)
+         WHERE ts.status <> 'Cancelled' AND tb.ts_code <> ? AND (tb.company_code, tb.ba_code, tb.sm_slno) IN (?)
          FOR UPDATE`,
         [sheet.ts_code, keys]
       );

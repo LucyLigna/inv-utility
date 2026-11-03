@@ -1,19 +1,20 @@
 import {
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
 } from '@mui/material';
-import { Cancel, CheckCircle } from '@mui/icons-material';
+import { Cancel, CheckCircle, Lock } from '@mui/icons-material';
 
 const BORDER = '1px solid #d5d8e0';
 const SELECTED = '#1a35b0';
 
-// Status cell: green tick for Active, grey cross for Inactive
+// Status cell: green tick for Active, blue lock for Closed, grey cross for Inactive / Cancelled
 export function StatusCell({ status }) {
-  const active = status === 'Active';
+  const icon = {
+    Active: <CheckCircle sx={{ color: '#4cc9a0', fontSize: 26 }} />,
+    Closed: <Lock sx={{ color: '#1a35b0', fontSize: 24 }} />,
+  }[status] || <Cancel sx={{ color: '#b0b4bd', fontSize: 26 }} />;
   return (
     <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-      {active
-        ? <CheckCircle sx={{ color: '#4cc9a0', fontSize: 26 }} />
-        : <Cancel sx={{ color: '#b0b4bd', fontSize: 26 }} />}
+      {icon}
       {status}
     </Box>
   );

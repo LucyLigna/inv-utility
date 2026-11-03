@@ -1,5 +1,7 @@
+import { LockOutlined } from '@mui/icons-material';
 import MasterScreen from '../../components/MasterScreen';
 import { StatusCell } from '../../components/ListTable';
+import api from '../../api';
 
 // '2026-11-03' -> '03-11-2026'
 const showDate = (d) => (d ? d.split('-').reverse().join('-') : '');
@@ -42,7 +44,21 @@ const config = {
       ? `Trip sheet ${r.tsc_no} has ${r.total_bills} bill${r.total_bills > 1 ? 's' : ''}. Remove them in Trip Sheet - Bill Details before deleting it.`
       : null),
   },
-  isLocked: (r) => r.status === 'Cancelled',
+  // Close: the trip is done. The sheet and its bills are then fixed and it leaves Trip Sheet - Bill Details.
+  actions: [{
+    label: 'Close',
+    icon: <LockOutlined />,
+    confirm: (r) => ({
+      title: `Close trip sheet ${r.tsc_no}?`,
+      message: `${r.route_name}, ${r.total_bills} bill${r.total_bills === 1 ? '' : 's'} and ${r.total_pack_qty} cases. Once closed it can't be edited and won't appear in Trip Sheet - Bill Details. This can't be undone.`,
+      cancelLabel: 'Keep it open',
+      confirmLabel: 'Close sheet',
+    }),
+    request: (r) => api.post(`/trip-sheets/${r.code}/close`),
+    done: (r) => `Trip sheet ${r.tsc_no} closed`,
+  }],
+  // Cancelled and closed sheets stay in the list and can only be viewed
+  isLocked: (r) => r.status !== 'Active',
   description: 'Trip route, driver, loading and trip dates',
   noStatus: true,
   fields: [

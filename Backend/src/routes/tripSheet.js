@@ -11,7 +11,8 @@ const day = (col) => `DATE_FORMAT(s.${col}, '%Y-%m-%d') AS ${col}`;
 // Dates go out as 'YYYY-MM-DD' strings so they don't shift with the time zone
 const SELECT = `SELECT s.ts_code AS code, s.tsc_no, ${day('entry_date')}, s.trip_code, r.name AS route_name,
   s.driver_code, d.name AS driver_name, ${day('loading_date')}, ${day('start_date')}, ${day('end_date')}, s.remarks,
-  s.status, DATE_FORMAT(s.cancelled_at, '%Y-%m-%d %H:%i') AS cancelled_at, s.total_bills, s.total_pack_qty
+  s.status, DATE_FORMAT(s.cancelled_at, '%Y-%m-%d %H:%i') AS cancelled_at,
+  DATE_FORMAT(s.closed_at, '%Y-%m-%d %H:%i') AS closed_at, s.total_bills, s.total_pack_qty
   FROM trip_sheet s
   JOIN trip_route r ON r.code = s.trip_code
   JOIN driver d ON d.code = s.driver_code`;
@@ -120,7 +121,7 @@ router.put('/:code', async (req, res, next) => {
          end_date = ?, remarks = ? WHERE ts_code = ? AND status = 'Active'`,
       [r.entry_date, r.driver_code, r.loading_date, r.start_date, r.end_date, r.remarks, req.params.code]
     );
-    if (!result.affectedRows) return res.status(404).json({ message: 'Trip sheet not found or already cancelled' });
+    if (!result.affectedRows) return res.status(404).json({ message: 'Trip sheet not found, or it is closed or cancelled' });
     res.json({ code: Number(req.params.code), ...r });
   } catch (err) {
     next(err);
@@ -128,6 +129,20 @@ router.put('/:code', async (req, res, next) => {
 });
 
 // Delete = mark the sheet Cancelled; the row and its number stay
+// Close the trip: the sheet and its bills are then fixed, and it no longer shows in Trip Sheet - Bill Details
+router.post('/:code/close', async (req, res, next) => {
+  try {
+    const [result] = await pool.query(
+      "UPDATE trip_sheet SET status = 'Closed', closed_at = NOW() WHERE ts_code = ? AND status = 'Active'",
+      [req.params.code]
+    );
+    if (!result.affectedRows) return res.status(404).json({ message: 'Trip sheet not found, or already closed or cancelled' });
+    res.json({ code: Number(req.params.code), status: 'Closed' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // A sheet that still has bills (Trip Sheet - Bill Details) can't be cancelled
 router.delete('/:code', async (req, res, next) => {
   try {

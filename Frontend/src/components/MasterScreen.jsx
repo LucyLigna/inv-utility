@@ -6,7 +6,7 @@ import {
   AddCircle, ArrowBack, Close, Delete, Download, Edit, Info, Refresh, Save, Visibility,
 } from '@mui/icons-material';
 import ActionBar from './ActionBar';
-import ConfirmDialog from './ConfirmDialog';
+import ConfirmDialog, { useConfirm } from './ConfirmDialog';
 import ListTable from './ListTable';
 import api, { errorMessage } from '../api';
 
@@ -39,13 +39,15 @@ const span = (cols) => ({ xs: 'span 12', md: `span ${cols}` });
 //   deletable     optional { confirm(row) -> question, done(row) -> message }: adds a Delete button
 //                 (DELETE apiPath/:code; the server decides what deleting means, e.g. marking it cancelled)
 //                 deletable.blockedReason(row) -> message when the row can't be deleted yet, shown instead of asking
+//   actions       optional extra buttons for the selected row: [{ label, icon, request(row) -> promise,
+//                 confirm(row) -> { title, message, confirmLabel, cancelLabel }, blockedReason(row), done(row) }]
 //   isLocked      optional (row) => true for rows that can only be viewed (e.g. cancelled ones)
 //   A field with lockOnEdit: true can be filled in when adding but not changed when editing
 //   searchFields, searchPlaceholder, exportFile
 export default function MasterScreen({ config }) {
   const {
     title, entity, description, apiPath, columns, fields, statusCols, noStatus, empty, toForm, renderExtra, validate,
-    deletable, isLocked = () => false, searchFields, searchPlaceholder, exportFile,
+    deletable, actions = [], isLocked = () => false, searchFields, searchPlaceholder, exportFile,
   } = config;
 
   const [rows, setRows] = useState([]);
@@ -84,7 +86,27 @@ export default function MasterScreen({ config }) {
   const selectedRow = rows.find((r) => r.code === selected);
   const selectedLocked = Boolean(selectedRow) && isLocked(selectedRow);
   const [confirmDelete, setConfirmDelete] = useState(null); // row waiting for the user to confirm
+  const [confirm, confirmDialog] = useConfirm();
   const [notice, setNotice] = useState('');
+
+  // An extra button (config.actions) on the selected row: says why not, or asks, then calls the API
+  const runAction = async (a) => {
+    const row = selectedRow;
+    const reason = a.blockedReason && a.blockedReason(row);
+    if (reason) {
+      setError(reason);
+      return;
+    }
+    if (a.confirm && !(await confirm(a.confirm(row)))) return;
+    try {
+      await a.request(row);
+      await load();
+      setError('');
+      if (a.done) setNotice(a.done(row));
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
 
   const doDelete = async () => {
     const row = confirmDelete;
@@ -185,6 +207,9 @@ export default function MasterScreen({ config }) {
         },
         disabled: !selectedRow || selectedLocked,
       }] : []),
+      ...actions.map((a) => ({
+        label: a.label, icon: a.icon, onClick: () => runAction(a), disabled: !selectedRow || selectedLocked,
+      })),
       { label: 'Refresh', icon: <Refresh />, onClick: load },
     ],
     right: [
@@ -348,6 +373,7 @@ export default function MasterScreen({ config }) {
         onCancel={() => setConfirmDelete(null)}
         onConfirm={doDelete}
       />
+      {confirmDialog}
       <Snackbar open={Boolean(notice)} autoHideDuration={3000} onClose={() => setNotice('')} message={notice} />
     </Box>
   );

@@ -80,10 +80,12 @@ function CustomerBills({ groups, allBills, contacts }) {
           <div key={g.key} style={{ breakInside: 'avoid', marginBottom: 14 }}>
             <div style={{ display: 'flex', gap: 16, fontSize: 13, marginBottom: 2 }}>
               <div style={{ flex: 1 }}><b>{i + 1}. {g.name}</b></div>
-              <div style={{ width: '28%' }}>Place: <b>{g.place || '—'}</b></div>
-              <div style={{ width: '22%' }}>Mobile #: <b>{c.mobile || '—'}</b></div>
+              <div style={{ width: '35%' }}>Place: <b>{g.place || '—'}</b></div>
             </div>
-            <div style={{ fontSize: 12, marginBottom: 4 }}>Sales Executive: <b>{c.sales_executive || '—'}</b></div>
+            <div style={{ display: 'flex', gap: 16, fontSize: 12, marginBottom: 4 }}>
+              <div style={{ flex: 1 }}>Sales Executive: <b>{c.sales_executive || '—'}</b></div>
+              <div style={{ width: '35%' }}>Mobile #: <b>{c.mobile || '—'}</b></div>
+            </div>
             <table style={{ width: '70%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
               <colgroup>
                 <col style={{ width: '25%' }} />
