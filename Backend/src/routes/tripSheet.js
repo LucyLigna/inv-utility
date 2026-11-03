@@ -41,6 +41,17 @@ function validate(body) {
   return r;
 }
 
+// A route can have only one Active trip sheet at a time. Returns that sheet (other than exceptCode), if any.
+async function activeSheetFor(db, tripCode, exceptCode = 0) {
+  const [[sheet]] = await db.query(
+    `SELECT s.tsc_no, r.name AS route_name FROM trip_sheet s JOIN trip_route r ON r.code = s.trip_code
+     WHERE s.trip_code = ? AND s.status = 'Active' AND s.ts_code <> ? LIMIT 1`,
+    [tripCode, exceptCode]
+  );
+  return sheet;
+}
+const busyMessage = (s) => `Trip sheet ${s.tsc_no} is already active for ${s.route_name}. Close it before starting another trip sheet for this route.`;
+
 // The route and driver must exist; inactive ones are allowed only if the sheet already uses them
 async function checkLinks(r, code) {
   const [[current]] = code
@@ -83,6 +94,13 @@ router.post('/', async (req, res, next) => {
     const linkError = await checkLinks(r, null);
     if (linkError) return res.status(400).json({ message: linkError });
     await conn.beginTransaction();
+    // Lock the route so two saves at once can't both open a sheet for it
+    await conn.query('SELECT code FROM trip_route WHERE code = ? FOR UPDATE', [r.trip_code]);
+    const busy = await activeSheetFor(conn, r.trip_code);
+    if (busy) {
+      await conn.rollback();
+      return res.status(409).json({ message: busyMessage(busy) });
+    }
     const [[last]] = await conn.query(
       `SELECT MAX(CAST(SUBSTRING(tsc_no, ${NO_PREFIX.length + 1}) AS UNSIGNED)) n FROM trip_sheet
        WHERE tsc_no LIKE ? FOR UPDATE`,
@@ -147,7 +165,7 @@ router.post('/:code/close', async (req, res, next) => {
 router.post('/:code/reopen', async (req, res, next) => {
   try {
     const [[sheet]] = await pool.query(
-      `SELECT status, DATE_FORMAT(closed_at, '%d-%m-%Y') AS closed_on, DATE(closed_at) = CURDATE() AS closed_today
+      `SELECT trip_code, status, DATE_FORMAT(closed_at, '%d-%m-%Y') AS closed_on, DATE(closed_at) = CURDATE() AS closed_today
        FROM trip_sheet WHERE ts_code = ?`,
       [req.params.code]
     );
@@ -155,6 +173,13 @@ router.post('/:code/reopen', async (req, res, next) => {
     if (sheet.status !== 'Closed') return res.status(400).json({ message: 'Only a closed trip sheet can be reopened' });
     if (!sheet.closed_today) {
       return res.status(400).json({ message: `This trip sheet was closed on ${sheet.closed_on}; only a sheet closed today can be reopened` });
+    }
+    // Same rule as adding: the route may have only one Active trip sheet
+    const busy = await activeSheetFor(pool, sheet.trip_code, Number(req.params.code));
+    if (busy) {
+      return res.status(409).json({
+        message: `Trip sheet ${busy.tsc_no} is already active for ${busy.route_name}. Close it before reopening this one.`,
+      });
     }
     await pool.query(
       "UPDATE trip_sheet SET status = 'Active', closed_at = NULL WHERE ts_code = ? AND status = 'Closed'",

@@ -31,7 +31,8 @@ const span = (cols) => ({ xs: 'span 12', md: `span ${cols}` });
 //   fields        [{ name, label, required, maxLength, upper, unique, cols (of 12), rows, type }]
 //                 type: 'text' (default) | 'date' | 'auto' (read-only, filled by the server on save)
 //                       | 'select' with optionsPath ('/drivers') and optionLabel(option); only Active options are
-//                         offered, plus the one the record already uses
+//                         offered, plus the one the record already uses. optionBusy(option, listRows) may
+//                         return a short reason, which greys that option out
 //   statusCols    width of the Status field (of 12); noStatus hides it
 //   empty         new-record values (or a function returning them), toForm(row) -> form values for an existing row
 //   renderExtra   optional ({ form, setForm, readOnly }) => extra form controls
@@ -40,7 +41,7 @@ const span = (cols) => ({ xs: 'span 12', md: `span ${cols}` });
 //                 (DELETE apiPath/:code; the server decides what deleting means, e.g. marking it cancelled)
 //                 deletable.blockedReason(row) -> message when the row can't be deleted yet, shown instead of asking
 //   actions       optional extra buttons for the selected row: [{ label, icon, request(row) -> promise,
-//                 confirm(row) -> { title, message, confirmLabel, cancelLabel }, blockedReason(row), done(row),
+//                 confirm(row) -> { title, message, confirmLabel, cancelLabel }, blockedReason(row, listRows), done(row),
 //                 availableFor(row) -> whether the button is enabled (default: rows that aren't locked) }]
 //   isLocked      optional (row) => true for rows that can only be viewed (e.g. cancelled ones)
 //   A field with lockOnEdit: true can be filled in when adding but not changed when editing
@@ -97,7 +98,7 @@ export default function MasterScreen({ config }) {
   // An extra button (config.actions) on the selected row: says why not, or asks, then calls the API
   const runAction = async (a) => {
     const row = selectedRow;
-    const reason = a.blockedReason && a.blockedReason(row);
+    const reason = a.blockedReason && a.blockedReason(row, rows);
     if (reason) {
       setError(reason);
       return;
@@ -354,7 +355,15 @@ export default function MasterScreen({ config }) {
                       ...(auto && !form[f.name] && { '& .MuiOutlinedInput-input': { color: '#888', fontWeight: 400 } }),
                     }}
                   >
-                    {choices && choices.map((o) => <MenuItem key={o.code} value={o.code}>{f.optionLabel(o)}</MenuItem>)}
+                    {choices && choices.map((o) => {
+                      const busy = f.optionBusy && o.code !== form[f.name] ? f.optionBusy(o, rows) : null;
+                      return (
+                        <MenuItem key={o.code} value={o.code} disabled={Boolean(busy)}>
+                          {f.optionLabel(o)}
+                          {busy && <Box component="span" sx={{ ml: 1, fontSize: 13, color: '#b3261e' }}>· {busy}</Box>}
+                        </MenuItem>
+                      );
+                    })}
                   </TextField>
                 );
               })}

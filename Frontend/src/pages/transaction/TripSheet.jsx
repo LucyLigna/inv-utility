@@ -72,9 +72,13 @@ const config = {
     label: 'Reopen',
     icon: <LockOpenOutlined />,
     availableFor: (r) => r.status === 'Closed',
-    blockedReason: (r) => ((r.closed_at || '').slice(0, 10) === dayFromToday()
-      ? null
-      : `Trip sheet ${r.tsc_no} was closed on ${showDateTime(r.closed_at)}. Only a sheet closed today can be reopened.`),
+    blockedReason: (r, sheets) => {
+      if ((r.closed_at || '').slice(0, 10) !== dayFromToday()) {
+        return `Trip sheet ${r.tsc_no} was closed on ${showDateTime(r.closed_at)}. Only a sheet closed today can be reopened.`;
+      }
+      const open = sheets.find((s) => s.trip_code === r.trip_code && s.status === 'Active');
+      return open ? `Trip sheet ${open.tsc_no} is already active for ${r.route_name}. Close it before reopening ${r.tsc_no}.` : null;
+    },
     confirm: (r) => ({
       title: `Reopen trip sheet ${r.tsc_no}?`,
       message: 'It becomes Active again: it can be edited and appears in Trip Sheet - Bill Details.',
@@ -101,6 +105,11 @@ const config = {
       optionLabel: (r) => `${r.name} (${r.short_code})`,
       lockOnEdit: true,
       lockedHint: 'The trip route of a saved trip sheet cannot be changed',
+      // A route can have only one Active trip sheet
+      optionBusy: (route, sheets) => {
+        const open = sheets.find((s) => s.trip_code === route.code && s.status === 'Active');
+        return open ? `${open.tsc_no} is active` : null;
+      },
     },
     {
       name: 'driver_code',
