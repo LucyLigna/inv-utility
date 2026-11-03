@@ -71,22 +71,24 @@ function BranchSummary({ groups, allBills }) {
 }
 
 // Customer-wise: for each customer its place, mobile and sales executive, then its bills
+// Each customer takes a quarter of the page (A4 portrait leaves about 273 mm), four customers to a page
+const CUSTOMERS_PER_PAGE = 4;
+const CUSTOMER_BLOCK_HEIGHT = '60mm';
+
 function CustomerBills({ groups, allBills, contacts }) {
+  const info = { ...td, fontSize: 12, background: '#f7f7f7' };
   return (
     <>
       {groups.map((g, i) => {
         const c = contacts[g.key] || {};
+        const pageEnds = (i + 1) % CUSTOMERS_PER_PAGE === 0 && i < groups.length - 1;
         return (
-          <div key={g.key} style={{ breakInside: 'avoid', marginBottom: 14 }}>
-            <div style={{ display: 'flex', gap: 16, fontSize: 13, marginBottom: 2 }}>
-              <div style={{ flex: 1 }}><b>{i + 1}. {g.name}</b></div>
-              <div style={{ width: '35%' }}>Place: <b>{g.place || '—'}</b></div>
-            </div>
-            <div style={{ display: 'flex', gap: 16, fontSize: 12, marginBottom: 4 }}>
-              <div style={{ flex: 1 }}>Sales Executive: <b>{c.sales_executive || '—'}</b></div>
-              <div style={{ width: '35%' }}>Mobile #: <b>{c.mobile || '—'}</b></div>
-            </div>
-            <table style={{ width: '70%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <div
+            key={g.key}
+            style={{ breakInside: 'avoid', minHeight: CUSTOMER_BLOCK_HEIGHT, ...(pageEnds && { breakAfter: 'page' }) }}
+          >
+            {/* One box per customer: its details on top, then its bills */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
               <colgroup>
                 <col style={{ width: '25%' }} />
                 <col style={{ width: '30%' }} />
@@ -94,6 +96,14 @@ function CustomerBills({ groups, allBills, contacts }) {
                 <col style={{ width: '20%' }} />
               </colgroup>
               <thead>
+                <tr>
+                  <td style={{ ...info, fontSize: 13 }} colSpan={2}><b>{i + 1}. {g.name}</b></td>
+                  <td style={info} colSpan={2}>Place: <b>{g.place || '—'}</b></td>
+                </tr>
+                <tr>
+                  <td style={info} colSpan={2}>Sales Executive: <b>{c.sales_executive || '—'}</b></td>
+                  <td style={info} colSpan={2}>Mobile #: <b>{c.mobile || '—'}</b></td>
+                </tr>
                 <tr>
                   <th style={{ ...th, textAlign: 'left' }}>Bill #</th>
                   <th style={{ ...th, textAlign: 'left' }}>Branch Code</th>
@@ -122,7 +132,7 @@ function CustomerBills({ groups, allBills, contacts }) {
           </div>
         );
       })}
-      <div style={{ borderTop: '2px solid #000', paddingTop: 6, fontSize: 13, fontWeight: 700 }}>
+      <div style={{ borderTop: '2px solid #000', paddingTop: 6, fontSize: 13, fontWeight: 700, breakInside: 'avoid' }}>
         Grand total: {allBills.length} bills · ₹ {money(amount(allBills))} · {packs(allBills)} packs
       </div>
     </>
