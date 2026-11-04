@@ -124,9 +124,43 @@ CREATE TABLE IF NOT EXISTS trip_sheet_bills (
   CONSTRAINT fk_trip_sheet_bills_sheet FOREIGN KEY (ts_code) REFERENCES trip_sheet (ts_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Users who can log in. password_hash is empty for a new user, and after an administrator expires the
+-- password; the user then creates a password at the next login.
+CREATE TABLE IF NOT EXISTS sys_users (
+  user_code       INT          NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  username        VARCHAR(50)  NOT NULL,
+  password_hash   VARCHAR(255) DEFAULT NULL,
+  user_type       ENUM('Administrator','User') NOT NULL DEFAULT 'User',
+  status          ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  password_set_at DATETIME     DEFAULT NULL,
+  last_login_at   DATETIME     DEFAULT NULL,
+  created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_sys_users_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Screens a 'User' may open (administrators have every screen)
+CREATE TABLE IF NOT EXISTS sys_user_rights (
+  user_code    INT         NOT NULL,
+  program_code VARCHAR(10) NOT NULL,
+  PRIMARY KEY (user_code, program_code),
+  CONSTRAINT fk_user_rights_user FOREIGN KEY (user_code) REFERENCES sys_users (user_code),
+  CONSTRAINT fk_user_rights_program FOREIGN KEY (program_code) REFERENCES sys_programfile (program_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Application settings kept in the database (e.g. the key that signs login tokens, created on first start)
+CREATE TABLE IF NOT EXISTS sys_settings (
+  setting_key   VARCHAR(50)  NOT NULL PRIMARY KEY,
+  setting_value VARCHAR(500) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- First administrator; sets a password at the first login
+INSERT IGNORE INTO sys_users (username, user_type) VALUES ('admin', 'Administrator');
+
 INSERT IGNORE INTO sys_menufile (menu_code, name, sort_order) VALUES
   ('M01', 'Master', 1),
-  ('M02', 'Transaction', 2);
+  ('M02', 'Transaction', 2),
+  ('M03', 'Administration', 3);
 
 INSERT IGNORE INTO sys_programfile (program_code, menu_code, name, route, sort_order) VALUES
   ('P0101', 'M01', 'Vehicle', '/master/vehicle', 1),
@@ -134,7 +168,8 @@ INSERT IGNORE INTO sys_programfile (program_code, menu_code, name, route, sort_o
   ('P0103', 'M01', 'Trip Route', '/master/trip-route', 3),
   ('P0201', 'M02', 'Trip Route Wise Customers', '/transaction/trip-route-customers', 1),
   ('P0202', 'M02', 'Trip Sheet', '/transaction/trip-sheet', 2),
-  ('P0203', 'M02', 'Trip Sheet - Bill Details', '/transaction/trip-sheet-bills', 3);
+  ('P0203', 'M02', 'Trip Sheet - Bill Details', '/transaction/trip-sheet-bills', 3),
+  ('P0301', 'M03', 'Users', '/admin/users', 1);
 
 -- ---------------------------------------------------------------------------
 -- Data pulled from the INV API (192.168.3.24) by the scheduler in src/sync

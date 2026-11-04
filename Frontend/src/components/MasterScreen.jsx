@@ -30,7 +30,7 @@ const span = (cols) => ({ xs: 'span 12', md: `span ${cols}` });
 //   description   one line under the form heading ('Vehicle number, make and status')
 //   fields        [{ name, label, required, maxLength, upper, unique, cols (of 12), rows, type }]
 //                 type: 'text' (default) | 'date' | 'auto' (read-only, filled by the server on save)
-//                       | 'select' with optionsPath ('/drivers') and optionLabel(option); only Active options are
+//                       | 'select' with optionsPath ('/drivers') or a fixed choices list, and optionLabel(option); only Active options are
 //                         offered, plus the one the record already uses. optionBusy(option, listRows) may
 //                         return a short reason, which greys that option out
 //   statusCols    width of the Status field (of 12); noStatus hides it
@@ -70,7 +70,7 @@ export default function MasterScreen({ config }) {
   const [options, setOptions] = useState({}); // dropdown choices per select field
 
   useEffect(() => {
-    fields.filter((f) => f.type === 'select').forEach((f) => {
+    fields.filter((f) => f.type === 'select' && f.optionsPath).forEach((f) => {
       api.get(f.optionsPath)
         .then(({ data }) => setOptions((o) => ({ ...o, [f.name]: data })))
         .catch((err) => setError(errorMessage(err)));
@@ -327,7 +327,7 @@ export default function MasterScreen({ config }) {
                 const auto = f.type === 'auto';
                 const fixed = auto || (f.lockOnEdit && Boolean(editCode)); // shown greyed, can't be changed
                 const choices = f.type === 'select'
-                  ? (options[f.name] || []).filter((o) => o.status === 'Active' || o.code === form[f.name])
+                  ? (f.choices || options[f.name] || []).filter((o) => o.status === 'Active' || o.code === form[f.name])
                   : null;
                 return (
                   <TextField

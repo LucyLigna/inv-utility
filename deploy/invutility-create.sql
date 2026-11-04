@@ -1,5 +1,5 @@
 -- Creates the invutility database for INV Utility on a new MySQL 8 server.
--- Generated from the live database on 2026-11-03 by: npm run db:script
+-- Generated from the live database on 2026-11-04 by: npm run db:script
 -- Run it as a user that may create databases, e.g.:  mysql -u root -p < invutility-create.sql
 -- Safe to run again: existing tables and rows are left as they are.
 
@@ -192,6 +192,38 @@ CREATE TABLE IF NOT EXISTS `sys_programfile` (
   CONSTRAINT `fk_program_menu` FOREIGN KEY (`menu_code`) REFERENCES `sys_menufile` (`menu_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- sys_settings
+CREATE TABLE IF NOT EXISTS `sys_settings` (
+  `setting_key` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `setting_value` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
+  PRIMARY KEY (`setting_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- sys_users
+CREATE TABLE IF NOT EXISTS `sys_users` (
+  `user_code` int NOT NULL AUTO_INCREMENT,
+  `username` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `password_hash` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `user_type` enum('Administrator','User') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'User',
+  `status` enum('Active','Inactive') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Active',
+  `password_set_at` datetime DEFAULT NULL,
+  `last_login_at` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`user_code`),
+  UNIQUE KEY `uq_sys_users_username` (`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- sys_user_rights
+CREATE TABLE IF NOT EXISTS `sys_user_rights` (
+  `user_code` int NOT NULL,
+  `program_code` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL,
+  PRIMARY KEY (`user_code`,`program_code`),
+  KEY `fk_user_rights_program` (`program_code`),
+  CONSTRAINT `fk_user_rights_program` FOREIGN KEY (`program_code`) REFERENCES `sys_programfile` (`program_code`),
+  CONSTRAINT `fk_user_rights_user` FOREIGN KEY (`user_code`) REFERENCES `sys_users` (`user_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- territory
 CREATE TABLE IF NOT EXISTS `territory` (
   `company_code` varchar(3) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -309,7 +341,8 @@ CREATE OR REPLACE VIEW `view_customer_list` AS select `company`.`coc_desc` AS `c
 -- sys_menufile rows
 INSERT IGNORE INTO `sys_menufile` (`menu_code`, `name`, `sort_order`, `status`) VALUES
   ('M01', 'Master', 1, 'Active'),
-  ('M02', 'Transaction', 2, 'Active');
+  ('M02', 'Transaction', 2, 'Active'),
+  ('M03', 'Administration', 3, 'Active');
 
 -- sys_programfile rows
 INSERT IGNORE INTO `sys_programfile` (`program_code`, `menu_code`, `name`, `route`, `sort_order`, `status`) VALUES
@@ -318,4 +351,8 @@ INSERT IGNORE INTO `sys_programfile` (`program_code`, `menu_code`, `name`, `rout
   ('P0103', 'M01', 'Trip Route', '/master/trip-route', 3, 'Active'),
   ('P0201', 'M02', 'Trip Route Wise Customers', '/transaction/trip-route-customers', 1, 'Active'),
   ('P0202', 'M02', 'Trip Sheet', '/transaction/trip-sheet', 2, 'Active'),
-  ('P0203', 'M02', 'Trip Sheet - Bill Details', '/transaction/trip-sheet-bills', 3, 'Active');
+  ('P0203', 'M02', 'Trip Sheet - Bill Details', '/transaction/trip-sheet-bills', 3, 'Active'),
+  ('P0301', 'M03', 'Users', '/admin/users', 1, 'Active');
+
+-- First administrator: sets a password at the first login
+INSERT IGNORE INTO `sys_users` (`username`, `user_type`) VALUES ('admin', 'Administrator');

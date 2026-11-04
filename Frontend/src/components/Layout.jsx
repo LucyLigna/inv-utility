@@ -5,10 +5,11 @@ import {
   ListItemText, Typography,
 } from '@mui/material';
 import {
-  AccountBalanceWallet, Apartment, Assessment, Close, ExpandMore, FolderOpen, Handyman, Menu as MenuIcon,
-  QueryStats, Search, Shuffle,
+  AccountBalanceWallet, AdminPanelSettings, Apartment, Assessment, Close, ExpandMore, FolderOpen, Handyman,
+  Menu as MenuIcon, QueryStats, Search, Shuffle,
 } from '@mui/icons-material';
 import api, { errorMessage } from '../api';
+import UserMenu from './UserMenu';
 
 const DRAWER_WIDTH = 320;
 const RAIL_WIDTH = 56;
@@ -22,6 +23,7 @@ const MENU_ICONS = [
   [/query/i, QueryStats],
   [/utilit/i, Handyman],
   [/financ|account/i, AccountBalanceWallet],
+  [/admin/i, AdminPanelSettings],
 ];
 const menuIcon = (name) => (MENU_ICONS.find(([re]) => re.test(name)) || [null, FolderOpen])[1];
 
@@ -66,7 +68,10 @@ export default function Layout() {
         <IconButton aria-label="open menu" onClick={() => setDrawerOpen(true)} sx={{ color: '#fff', mt: 0.5 }}>
           <MenuIcon fontSize="large" />
         </IconButton>
-        <Box sx={{ mt: 'auto', mb: 1.5, textAlign: 'center', fontSize: 12, fontWeight: 700, lineHeight: 1.4 }}>
+        <Box sx={{ mt: 'auto' }}>
+          <UserMenu />
+        </Box>
+        <Box sx={{ mb: 1.5, textAlign: 'center', fontSize: 12, fontWeight: 700, lineHeight: 1.4 }}>
           V1
           <br />
           {__APP_VERSION__}

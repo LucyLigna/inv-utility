@@ -104,6 +104,9 @@ async function main() {
     out.push(`${rows.map((r) => `  (${cols.map((c) => pool.escape(r[c])).join(', ')})`).join(',\n')};`, '');
   }
 
+  // The first administrator, without a password (users and passwords are never copied from this database)
+  out.push('-- First administrator: sets a password at the first login', "INSERT IGNORE INTO `sys_users` (`username`, `user_type`) VALUES ('admin', 'Administrator');", '');
+
   fs.writeFileSync(OUT_FILE, out.join('\n'));
   console.log(`Wrote ${OUT_FILE}: ${tables.length} tables, ${views.length} views, menu rows from ${DATA_TABLES.join(', ')}`);
 }

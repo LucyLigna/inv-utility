@@ -66,6 +66,17 @@ To update later, build a new package and run the same command. The server's `bac
 
 Optional parameters: `-Port`, `-ApiPort`, `-InstallDir`, `-SiteName`, `-ApiSiteName`.
 
+## Users and logging in
+
+Everyone signs in with a user name and password. Users are managed by administrators under **Administration → Users**.
+
+- **First login:** the database comes with one user, `admin` (Administrator), without a password. Open the site, type `admin`, leave the password empty and press **Sign in**; you are asked to create the password. Do this straight after installing, because whoever does it first owns the admin account.
+- **New users:** an administrator adds them with a user name, user type and (for type User) the screens they may use. The new user creates a password at the first login the same way.
+- **User types:** an **Administrator** has every right, including user administration. A **User** sees only the screens ticked under Rights; the API also refuses changes on other screens.
+- **Forgotten password / expire a password:** select the user in Users and press **Expire Password**. The old password stops working at once and the user creates a new one at the next login.
+- **Change password:** click your initial at the bottom of the blue bar on the left, then **Change password**. **Log out** is in the same menu.
+- A login lasts 12 hours. The key that signs logins is created automatically and kept in the `sys_settings` table, so nothing needs to be added to `.env`.
+
 ## Data sync from the INV API
 
 The backend on the server pulls data from `http://192.168.3.24/INVUtility/Service1.svc/getinvdata/...` on a schedule (India time):
