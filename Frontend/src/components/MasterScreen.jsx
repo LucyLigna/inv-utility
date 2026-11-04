@@ -34,7 +34,7 @@ const span = (cols) => ({ xs: 'span 12', md: `span ${cols}` });
 //   apiPath       '/drivers' (GET list, POST, PUT /:code, GET /check-duplicate?field=&value=&excludeCode=)
 //   columns       list columns: [{ label, field, width, render(row), exportValue(row) }]
 //   description   one line under the form heading ('Vehicle number, make and status')
-//   fields        [{ name, label, required, maxLength, upper, unique, cols (of 12), rows, type }]
+//   fields        [{ name, label, required, maxLength, upper, digits (only 0-9 can be typed), unique, cols (of 12), rows, type }]
 //                 type: 'text' (default) | 'date' | 'auto' (read-only, filled by the server on save)
 //                       | 'select' with optionsPath ('/drivers') or a fixed choices list, and optionLabel(option); only Active options are
 //                         offered, plus the one the record already uses. optionBusy(option, listRows) may
@@ -147,7 +147,8 @@ export default function MasterScreen({ config }) {
   const backToList = () => setMode('list');
 
   const changeField = (field, value) => {
-    setForm({ ...form, [field.name]: field.upper ? value.toUpperCase() : value });
+    const typed = field.digits ? value.replace(/\D/g, '') : value;
+    setForm({ ...form, [field.name]: field.upper ? typed.toUpperCase() : typed });
     setFieldErrors({ ...fieldErrors, [field.name]: '' });
   };
 
@@ -356,7 +357,7 @@ export default function MasterScreen({ config }) {
                     InputLabelProps={f.type === 'date' || auto ? { shrink: true } : undefined}
                     InputProps={{ readOnly: readOnly || fixed }}
                     SelectProps={fixed ? { IconComponent: () => null } : undefined}
-                    inputProps={{ maxLength: f.maxLength }}
+                    inputProps={{ maxLength: f.maxLength, ...(f.digits && { inputMode: 'numeric' }) }}
                     sx={{
                       ...FIELD_SX,
                       gridColumn: span(f.cols || 4),

@@ -10,23 +10,19 @@ const UNIQUE_FIELDS = {
   mobile: 'Another driver has this mobile number',
 };
 
-// '+91 98470 12345' -> '9847012345'; the driver logs in to the delivery page with this number
-const normalizeMobile = (v) => {
-  const digits = String(v || '').replace(/\D/g, '');
-  return digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
-};
-
 function validate(body) {
   const name = String(body.name || '').trim().toUpperCase();
   const shortCode = String(body.short_code || '').trim().toUpperCase();
-  const mobile = normalizeMobile(body.mobile);
+  // The driver logs in to the delivery page with this number: exactly 10 digits, nothing else
+  const mobile = String(body.mobile ?? '').trim();
   const status = body.status || 'Active';
   if (!name) return { error: 'Driver name is required' };
   if (!shortCode) return { error: 'Short code is required' };
   if (shortCode.length > 10) return { error: 'Short code can be at most 10 characters' };
-  if (mobile && !/^\d{10}$/.test(mobile)) return { error: 'Mobile number must be 10 digits' };
+  if (!mobile) return { error: 'Mobile number is required' };
+  if (!/^\d{10}$/.test(mobile)) return { error: 'Mobile number must be exactly 10 digits' };
   if (!STATUSES.includes(status)) return { error: 'Status must be Active or Inactive' };
-  return { name, short_code: shortCode, mobile: mobile || null, status };
+  return { name, short_code: shortCode, mobile, status };
 }
 
 function handleDbError(err, res, next) {
@@ -52,7 +48,7 @@ router.get('/', async (req, res, next) => {
 router.get('/check-duplicate', async (req, res, next) => {
   const { field } = req.query;
   if (!UNIQUE_FIELDS[field]) return res.status(400).json({ message: 'field must be name, short_code or mobile' });
-  const value = field === 'mobile' ? normalizeMobile(req.query.value) : String(req.query.value || '').trim().toUpperCase();
+  const value = String(req.query.value || '').trim().toUpperCase();
   if (!value) return res.json({ exists: false });
   try {
     const [rows] = await pool.query(`SELECT code FROM driver WHERE ${field} = ? AND code <> ?`, [
