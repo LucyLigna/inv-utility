@@ -141,7 +141,7 @@ function CustomerBills({ groups, allBills, contacts, qr }) {
                 <tr>
                   <th style={{ ...th, textAlign: 'left' }}>Bill #</th>
                   <th style={{ ...th, textAlign: 'left' }}>Branch Code</th>
-                  <th style={{ ...th, textAlign: 'left' }}>E-way Bill #</th>
+                  <th style={{ ...th, textAlign: 'left' }}>E-way #</th>
                   <th style={{ ...th, textAlign: 'right' }}>Amount</th>
                   <th style={{ ...th, textAlign: 'right' }}>No. of Packs</th>
                 </tr>
