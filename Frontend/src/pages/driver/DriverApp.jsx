@@ -4,7 +4,9 @@ import {
   Alert, AppBar, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, IconButton, LinearProgress,
   Paper, TextField, Toolbar, Typography,
 } from '@mui/material';
-import { CheckCircle, ErrorOutline, Logout, QrCodeScanner, Refresh } from '@mui/icons-material';
+import {
+  CheckCircle, ErrorOutline, KeyboardArrowDown, KeyboardArrowUp, Logout, Phone, QrCodeScanner, Refresh,
+} from '@mui/icons-material';
 import QrScanner from './QrScanner';
 
 // Driver delivery page, opened on the phone at /driver. The driver logs in with the mobile number from Driver
@@ -24,6 +26,7 @@ driverApi.interceptors.request.use((config) => {
 const message = (err) => err.response?.data?.message || (err.response ? err.message : 'No connection to the server. Check the mobile data and try again.');
 const showDate = (d) => (d ? d.split('-').reverse().join('-') : '');
 const time = (d) => (d ? d.slice(11, 16) : '');
+const money = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // The phone's location for the delivery, if the driver allows it; never waits more than a few seconds
 const locate = () => new Promise((resolve) => {
@@ -86,6 +89,13 @@ function Trip({ onLogout }) {
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState(null); // { ok, title, text }
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(new Set()); // customers showing their mobile number and bills
+  const toggle = (key) => setExpanded((open) => {
+    const next = new Set(open);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
 
   const load = useCallback(async () => {
     try {
@@ -150,20 +160,61 @@ function Trip({ onLogout }) {
           {stops.reduce((n, s) => n + s.cases, 0)} cases
         </Typography>
         {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
-        {stops.map((s, i) => (
-          <Paper key={s.key} variant="outlined" sx={{ p: 1.5, mb: 1, display: 'flex', gap: 1.5, alignItems: 'center', opacity: s.delivered ? 0.75 : 1, borderColor: s.delivered ? '#a5d6a7' : undefined }}>
-            <Box sx={{ width: 28, height: 28, borderRadius: '50%', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, bgcolor: s.delivered ? '#2e7d32' : '#dfe3ea', color: s.delivered ? '#fff' : '#333' }}>
-              {s.delivered ? <CheckCircle sx={{ fontSize: 20 }} /> : i + 1}
-            </Box>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography fontWeight={700} sx={{ fontSize: 15, lineHeight: 1.25 }}>{s.name}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {s.place || '—'} · {s.bills.length} bill{s.bills.length > 1 ? 's' : ''} · {s.cases} cases
-              </Typography>
-            </Box>
-            {s.delivered && <Chip size="small" color="success" label={time(s.delivered.delivered_at)} />}
-          </Paper>
-        ))}
+        {stops.map((s, i) => {
+          const open = expanded.has(s.key);
+          return (
+            <Paper key={s.key} variant="outlined" sx={{ mb: 1, borderColor: s.delivered ? '#a5d6a7' : undefined, overflow: 'hidden' }}>
+              {/* Tap the customer to show its mobile number and bills */}
+              <Box
+                role="button"
+                aria-expanded={open}
+                onClick={() => toggle(s.key)}
+                sx={{ p: 1.5, display: 'flex', gap: 1.5, alignItems: 'center', cursor: 'pointer', opacity: s.delivered && !open ? 0.75 : 1 }}
+              >
+                <Box sx={{ width: 28, height: 28, borderRadius: '50%', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, bgcolor: s.delivered ? '#2e7d32' : '#dfe3ea', color: s.delivered ? '#fff' : '#333' }}>
+                  {s.delivered ? <CheckCircle sx={{ fontSize: 20 }} /> : i + 1}
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography fontWeight={700} sx={{ fontSize: 15, lineHeight: 1.25 }}>{s.name}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {s.place || '—'} · {s.bills.length} bill{s.bills.length > 1 ? 's' : ''} · {s.cases} cases
+                  </Typography>
+                </Box>
+                {s.delivered && <Chip size="small" color="success" label={time(s.delivered.delivered_at)} />}
+                {open ? <KeyboardArrowUp sx={{ color: '#888' }} /> : <KeyboardArrowDown sx={{ color: '#888' }} />}
+              </Box>
+              {open && (
+                <Box sx={{ px: 1.5, pb: 1.5, borderTop: '1px solid #eceef2', bgcolor: '#fafbfc' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1 }}>
+                    <Phone sx={{ fontSize: 18, color: '#666' }} />
+                    {s.mobile
+                      ? <Typography component="a" href={`tel:${s.mobile}`} sx={{ fontWeight: 700, color: 'primary.main', textDecoration: 'none', fontSize: 15 }}>{s.mobile}</Typography>
+                      : <Typography variant="body2" color="text.secondary">No mobile number</Typography>}
+                  </Box>
+                  {s.bills.map((b) => (
+                    <Box key={`${b.company_branch}|${b.smc_no}`} sx={{ py: 0.75, borderTop: '1px dashed #dfe3ea', fontSize: 14 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                        <span><b>{b.smc_no}</b> · {showDate(b.bill_date)}</span>
+                        <b>₹ {money(b.net_amount)}</b>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, color: '#555', fontSize: 13 }}>
+                        <span>{b.company_branch}{b.eway_billno ? ` · E-way ${b.eway_billno}` : ''}</span>
+                        <span>{b.pack_qty} pack{b.pack_qty === 1 ? '' : 's'}</span>
+                      </Box>
+                      {b.cuc_desc && <Box sx={{ color: '#555', fontSize: 13 }}>{b.cuc_desc}</Box>}
+                    </Box>
+                  ))}
+                  {s.bills.length > 1 && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.75, borderTop: '1px solid #dfe3ea', fontSize: 14, fontWeight: 700 }}>
+                      <span>Total · {s.cases} packs</span>
+                      <span>₹ {money(s.amount)}</span>
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </Paper>
+          );
+        })}
         {!stops.length && <Alert severity="info">There are no bills on this trip sheet yet.</Alert>}
       </Box>
 

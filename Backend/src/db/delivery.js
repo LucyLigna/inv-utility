@@ -6,7 +6,7 @@
 const crypto = require('crypto');
 const pool = require('../config/db');
 const { signingKey } = require('../auth/auth');
-const { sheetBills } = require('./sheetBills');
+const { sheetBills, customerContacts } = require('./sheetBills');
 
 const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // no 0/O, 1/I: easy to read and type
 const CODE_LENGTH = 8;
@@ -47,7 +47,9 @@ async function codesFor(sheet, groupKeys) {
   return Object.fromEntries(entries);
 }
 
-// The sheet's stops in the saved order: [{ key, name, place, bills, cases, amount, code, delivered }]
+// The sheet's stops in the saved order:
+// [{ key, name, place, mobile, bills: [{ smc_no, bill_date, company_branch, eway_billno, net_amount, pack_qty, cuc_desc }],
+//    cases, amount, code, delivered }]
 async function sheetStops(sheet) {
   const bills = await sheetBills(sheet);
   const stops = new Map();
@@ -56,13 +58,20 @@ async function sheetStops(sheet) {
       stops.set(b.group_key, { key: b.group_key, name: b.group_name, place: b.group_place, branch: b.group_branch, bills: [], cases: 0, amount: 0 });
     }
     const s = stops.get(b.group_key);
-    s.bills.push(b.smc_no);
+    s.bills.push({
+      smc_no: b.smc_no, bill_date: b.bill_date, company_branch: b.company_branch, eway_billno: b.eway_billno,
+      net_amount: Number(b.net_amount) || 0, pack_qty: Number(b.pack_qty) || 0,
+      // a sub customer's bill under its main customer: whose bill it is
+      cuc_desc: b.cuc_desc !== b.group_name ? b.cuc_desc : null,
+    });
     s.cases += Number(b.pack_qty) || 0;
     s.amount += Number(b.net_amount) || 0;
   }
-  const marks = await deliveries(sheet.code);
-  const codes = await codesFor(sheet, [...stops.keys()]);
-  return [...stops.values()].map((s) => ({ ...s, code: codes[s.key].code, delivered: marks[s.key] || null }));
+  const keys = [...stops.keys()];
+  const [marks, codes, contacts] = await Promise.all([deliveries(sheet.code), codesFor(sheet, keys), customerContacts(keys)]);
+  return [...stops.values()].map((s) => ({
+    ...s, mobile: contacts[s.key]?.mobile || null, code: codes[s.key].code, delivered: marks[s.key] || null,
+  }));
 }
 
 module.exports = { readScan, deliveries, codesFor, sheetStops };
