@@ -4,7 +4,7 @@ import {
   TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import {
-  AddCircleOutline, AddLocationAlt, CheckCircle, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, PlaylistAdd, Refresh,
+  AddCircleOutline, AddLocationAlt, CheckCircle, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, LocationOff, LocationOn, PlayArrow, PlaylistAdd, Refresh,
   Save, Sort, SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
@@ -447,6 +447,26 @@ export default function TripSheetBills() {
                                   />
                                 </Tooltip>
                               )}
+                              {/* Where the driver scanned the QR, on Google Maps (the phone sends a location only over https) */}
+                              {deliveries[g.key] && (deliveries[g.key].latitude != null ? (
+                                <Tooltip title={`Show on map (accurate to about ${deliveries[g.key].accuracy_m ?? '?'} m)`}>
+                                  <IconButton
+                                    size="small"
+                                    component="a"
+                                    href={`https://www.google.com/maps/search/?api=1&query=${deliveries[g.key].latitude},${deliveries[g.key].longitude}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-label="show delivery location on map"
+                                    sx={{ p: 0.25, color: '#c62828' }}
+                                  >
+                                    <LocationOn fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              ) : (
+                                <Tooltip title="No location: the phone did not send one (location needs the https address, and the driver must allow it)">
+                                  <LocationOff fontSize="small" sx={{ color: '#b0b4bd' }} />
+                                </Tooltip>
+                              ))}
                               {!g.onRoute && canMap && (
                                 <Button size="small" startIcon={<AddLocationAlt />} onClick={() => openMap(g.bills[0], g.name)} sx={{ py: 0, minWidth: 0 }}>
                                   Map
