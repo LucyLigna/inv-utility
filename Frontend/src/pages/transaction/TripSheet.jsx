@@ -26,7 +26,7 @@ const config = {
   exportFile: 'trip-sheets',
   searchFields: ['tsc_no', 'route_name', 'driver_name', 'remarks', 'status'],
   searchPlaceholder: 'Search sheet no, route, driver',
-  dateFilter: { field: 'loading_date', label: 'Loading date' },
+  dateFilter: { field: 'loading_date', label: 'Loading date', defaultToday: true },
   columns: [
     { label: 'Sheet No', field: 'tsc_no', width: 130 },
     dateColumn('Entry Date', 'entry_date'),

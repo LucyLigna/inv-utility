@@ -18,6 +18,12 @@ const FIELD_SX = {
   '& .MuiOutlinedInput-input': { fontWeight: 600, py: 1.6 },
   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#c8ccd4' },
 };
+// Today as 'YYYY-MM-DD' in local time
+const localToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 // Width in a 12-column grid; full width on narrow screens
 const span = (cols) => ({ xs: 'span 12', md: `span ${cols}` });
 
@@ -46,7 +52,8 @@ const span = (cols) => ({ xs: 'span 12', md: `span ${cols}` });
 //   isLocked      optional (row) => true for rows that can only be viewed (e.g. cancelled ones)
 //   A field with lockOnEdit: true can be filled in when adding but not changed when editing
 //   dateFilter    optional { field: 'loading_date', label: 'Loading date' }: From / To boxes above the list
-//                 that keep rows whose field ('YYYY-MM-DD') is in the range; either box may be left empty
+//                 that keep rows whose field ('YYYY-MM-DD') is in the range; either box may be left empty.
+//                 defaultToday: true starts both boxes at today's date
 //   searchFields, searchPlaceholder, exportFile
 export default function MasterScreen({ config }) {
   const {
@@ -56,8 +63,9 @@ export default function MasterScreen({ config }) {
 
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
+  const startDate = dateFilter?.defaultToday ? localToday() : '';
+  const [fromDate, setFromDate] = useState(startDate);
+  const [toDate, setToDate] = useState(startDate);
   const [selected, setSelected] = useState(null);
   const [mode, setMode] = useState('list'); // list | add | edit | view
   // empty may be a function, for defaults worked out when the form opens (such as today's date)
