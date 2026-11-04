@@ -38,7 +38,7 @@ function RightsPicker({ form, setForm, readOnly }) {
   });
 
   return (
-    <FormSection title="Rights" hint="Tick the screens this user may use. Untick a screen to hide it from the user.">
+    <FormSection title="Rights *" hint="Tick the screens this user may use (at least one for an active user). Untick a screen to hide it from the user.">
       {error && <Alert severity="error">{error}</Alert>}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
         {modules.map(([menuCode, menuName]) => {
@@ -120,7 +120,13 @@ const makeConfig = (me) => ({
   statusCols: 4,
   empty: { username: '', user_type: 'User', status: 'Active', rights: [] },
   toForm: (r) => ({ username: r.username, user_type: r.user_type, status: r.status, rights: r.rights || [] }),
-  validate: (f) => (/\s/.test(f.username.trim()) ? 'User name cannot contain spaces' : null),
+  validate: (f) => {
+    if (/\s/.test(f.username.trim())) return 'User name cannot contain spaces';
+    if (f.user_type === 'User' && f.status === 'Active' && !f.rights.length) {
+      return 'Give an active user the right to at least one screen (tick it under Rights)';
+    }
+    return null;
+  },
   renderExtra: (props) => <RightsPicker {...props} />,
   actions: [{
     label: 'Expire Password',

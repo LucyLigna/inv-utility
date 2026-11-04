@@ -64,6 +64,10 @@ function validate(body) {
   if (!STATUSES.includes(status)) return { error: 'Status must be Active or Inactive' };
   // Administrators have every right, so their list is not kept
   const rights = userType === 'Administrator' ? [] : [...new Set((Array.isArray(body.rights) ? body.rights : []).map(String))];
+  // An active user of type User must be able to open at least one screen
+  if (userType === 'User' && status === 'Active' && !rights.length) {
+    return { error: 'Give an active user the right to at least one screen' };
+  }
   return { username, user_type: userType, status, rights };
 }
 
