@@ -96,6 +96,24 @@ router.get('/:tsCode', async (req, res, next) => {
   }
 });
 
+// Fresh details (route position and grouping) of the given bills: ?keys=company|branch|sm_slno,company|branch|sm_slno
+// Used after a customer is mapped to the route, so the screen can regroup its ticked bills without reloading them.
+router.get('/:tsCode/describe', async (req, res, next) => {
+  const keys = String(req.query.keys || '').split(',').map((k) => k.split('|')).filter((k) => k.length === 3 && k.every(Boolean));
+  try {
+    const sheet = await findSheet(req.params.tsCode);
+    if (!sheet) return res.status(404).json({ message: 'Trip sheet not found' });
+    if (!keys.length) return res.json([]);
+    const [rows] = await pool.query(
+      `SELECT ${BILL_FIELDS} FROM salesdetails s ${BILL_JOINS} WHERE (s.company_code, s.ba_code, s.sm_slno) IN (?)`,
+      [sheet.trip_code, sheet.trip_code, keys]
+    );
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Bills that can go on the sheet: not on another trip sheet (Active or Closed; a Cancelled sheet frees its bills).
 //   ?customers=route (default: customers on the sheet's route) | all (every bill in the route's branches)
 //   &transport=own (default: transporter_type Own) | all   &search=bill no or customer name

@@ -115,6 +115,129 @@ router.get('/:tripCode/related', async (req, res, next) => {
   }
 });
 
+// The route's customers in order, each with its main customer (a Sub row belongs to the nearest Main above it)
+async function routeRows(db, tripCode, lock = false) {
+  const [rows] = await db.query(
+    `SELECT t.company_code, t.ba_code, t.cu_code, t.main_sub, t.sort_order, c.cuc_desc, c.gst_number, c.cuc_mobile
+     FROM trip_route_customers t
+     LEFT JOIN customer c ON c.company_code = t.company_code AND c.ba_code = t.ba_code AND c.cu_code = t.cu_code
+     WHERE t.trip_code = ? ORDER BY t.sort_order${lock ? ' FOR UPDATE' : ''}`,
+    [tripCode]
+  );
+  let main = null;
+  return rows.map((r) => {
+    if (r.main_sub === 'Main' || !main) main = r;
+    return { ...r, main };
+  });
+}
+const keyOf = (c) => `${c.company_code}|${c.ba_code}|${c.cu_code}`;
+
+// Before mapping a customer to the route (from Trip Sheet - Bill Details): the main customers on the route that
+// have a customer with the same GST number (or the same mobile number when it has none), so the new customer can
+// go under one of them as a sub customer. ?company_code=&ba_code=&cu_code=
+router.get('/:tripCode/map-options', async (req, res, next) => {
+  const { company_code: companyCode, ba_code: baCode, cu_code: cuCode } = req.query;
+  try {
+    const route = await findRoute(req.params.tripCode);
+    if (!route) return res.status(404).json({ message: 'Route not found' });
+    const [[cust]] = await pool.query(
+      `SELECT company_code, ba_code, cu_code, cuc_desc, cuc_place, gst_number, cuc_mobile FROM customer
+       WHERE company_code = ? AND ba_code = ? AND cu_code = ?`,
+      [companyCode, baCode, cuCode]
+    );
+    if (!cust) return res.status(404).json({ message: 'Customer not found' });
+    const rows = await routeRows(pool, route.code);
+    const gst = String(cust.gst_number || '').trim();
+    const mobile = String(cust.cuc_mobile || '').trim();
+    const match = gst ? 'gst' : mobile ? 'mobile' : null;
+    const same = (r) => (match === 'gst' ? String(r.gst_number || '').trim() === gst : String(r.cuc_mobile || '').trim() === mobile);
+    const mains = new Map();
+    if (match) {
+      rows.filter(same).forEach((r) => {
+        const k = keyOf(r.main);
+        if (!mains.has(k)) {
+          mains.set(k, {
+            company_code: r.main.company_code, ba_code: r.main.ba_code, cu_code: r.main.cu_code, name: r.main.cuc_desc,
+            sort_order: r.main.sort_order, matched: [],
+          });
+        }
+        mains.get(k).matched.push(r.cuc_desc);
+      });
+    }
+    res.json({
+      route,
+      customer: cust,
+      alreadyOnRoute: rows.some((r) => keyOf(r) === keyOf(cust)),
+      match,
+      value: match === 'gst' ? gst : match === 'mobile' ? mobile : null,
+      mains: [...mains.values()].sort((a, b) => a.sort_order - b.sort_order),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Map one customer to the route. Body: { company_code, ba_code, cu_code, under } where under is the main customer
+// ({ company_code, ba_code, cu_code }) to add it beneath as a sub customer (it goes at the end of that group),
+// or null to add it as a new main customer at the end of the route.
+router.post('/:tripCode/map', async (req, res, next) => {
+  const cust = {
+    company_code: String(req.body.company_code || '').trim(),
+    ba_code: String(req.body.ba_code || '').trim(),
+    cu_code: String(req.body.cu_code || '').trim(),
+  };
+  const under = req.body.under || null;
+  if (!cust.company_code || !cust.ba_code || !cust.cu_code) return res.status(400).json({ message: 'Customer is required' });
+  const conn = await pool.getConnection();
+  try {
+    const route = await findRoute(req.params.tripCode);
+    if (!route) return res.status(404).json({ message: 'Route not found' });
+    await conn.beginTransaction();
+    const [[inBranch]] = await conn.query(
+      `SELECT COUNT(*) n FROM customer c JOIN trip_route_branches b ON b.company_code = c.company_code AND b.ba_code = c.ba_code
+       WHERE b.trip_code = ? AND b.status = 'Active' AND c.company_code = ? AND c.ba_code = ? AND c.cu_code = ?`,
+      [route.code, cust.company_code, cust.ba_code, cust.cu_code]
+    );
+    if (!inBranch.n) {
+      await conn.rollback();
+      return res.status(400).json({ message: "This customer is not in one of the route's branches" });
+    }
+    const rows = await routeRows(conn, route.code, true);
+    if (rows.some((r) => keyOf(r) === keyOf(cust))) {
+      await conn.rollback();
+      return res.status(409).json({ message: `This customer is already on ${route.name}` });
+    }
+    let position;
+    let mainSub = 'Main';
+    if (under) {
+      const group = rows.filter((r) => keyOf(r.main) === keyOf(under));
+      if (!group.length || group[0].main_sub !== 'Main') {
+        await conn.rollback();
+        return res.status(400).json({ message: 'The chosen main customer is no longer on the route' });
+      }
+      position = group[group.length - 1].sort_order + 1;
+      mainSub = 'Sub';
+      // make room right after the group
+      await conn.query('UPDATE trip_route_customers SET sort_order = sort_order + 1 WHERE trip_code = ? AND sort_order >= ?', [
+        route.code, position,
+      ]);
+    } else {
+      position = (rows.length ? rows[rows.length - 1].sort_order : 0) + 1;
+    }
+    await conn.query(
+      'INSERT INTO trip_route_customers (trip_code, company_code, ba_code, cu_code, main_sub, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+      [route.code, cust.company_code, cust.ba_code, cust.cu_code, mainSub, position]
+    );
+    await conn.commit();
+    res.status(201).json({ ...cust, main_sub: mainSub, sort_order: position });
+  } catch (err) {
+    await conn.rollback();
+    next(err);
+  } finally {
+    conn.release();
+  }
+});
+
 // Replaces the route's customer list, in order.
 // Body: { customers: [{ company_code, ba_code, cu_code, main_sub, remarks }] }; remarks are kept for main customers only
 router.put('/:tripCode', async (req, res, next) => {

@@ -4,12 +4,14 @@ import {
   TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import {
-  AddCircleOutline, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, PlaylistAdd, Refresh,
+  AddCircleOutline, AddLocationAlt, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, PlaylistAdd, Refresh,
   Save, Sort, SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
 import { useConfirm } from '../../components/ConfirmDialog';
 import TripSheetPrint, { exportSummaryExcel } from './TripSheetPrint';
+import MapToRouteDialog from './MapToRouteDialog';
+import { useAuth } from '../../auth';
 import api, { errorMessage } from '../../api';
 
 const BORDER = '1px solid #d5d8e0';
@@ -87,6 +89,35 @@ export default function TripSheetBills() {
   const [printFormat, setPrintFormat] = useState('branch');
   const [contacts, setContacts] = useState({}); // mobile and sales executive per customer, for printing
   const [confirm, confirmDialog] = useConfirm();
+  const [mapping, setMapping] = useState(null); // customer being mapped to the route
+  const { user } = useAuth();
+  // Mapping changes Trip Route Wise Customers, so it needs the right to that screen
+  const canMap = user.isAdmin || user.programs.includes('P0201');
+
+  const openMap = (bill, name) => setMapping({
+    company_code: bill.company_code, ba_code: bill.ba_code, cu_code: bill.cu_code, name, company_branch: bill.company_branch,
+  });
+
+  // After mapping, the customer's bills now belong to the route (possibly under a main customer):
+  // regroup the ticked bills and reload the bills list, keeping any unsaved ticks
+  const afterMapped = async (message) => {
+    setMapping(null);
+    setNotice(message);
+    try {
+      const keys = [...selected.keys()];
+      if (keys.length) {
+        const { data } = await api.get(`/trip-sheet-bills/${sheet.code}/describe`, { params: { keys: keys.join(',') } });
+        setSelected((m) => {
+          const next = new Map(m);
+          data.forEach((b) => { if (next.has(billKey(b))) next.set(billKey(b), b); });
+          return next;
+        });
+      }
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
 
   const loadSheets = () => api.get('/trip-sheet-bills/sheets')
     .then(({ data }) => setSheets(data))
@@ -396,6 +427,11 @@ export default function TripSheetBills() {
                               </IconButton>
                               {g.name}
                               {!g.onRoute && <Chip size="small" label="Not on route" sx={{ ml: 0.5, height: 20, fontWeight: 400 }} />}
+                              {!g.onRoute && canMap && (
+                                <Button size="small" startIcon={<AddLocationAlt />} onClick={() => openMap(g.bills[0], g.name)} sx={{ py: 0, minWidth: 0 }}>
+                                  Map
+                                </Button>
+                              )}
                             </Box>
                           </TableCell>
                           <TableCell sx={cell}>{g.company_branch}</TableCell>
@@ -515,6 +551,14 @@ export default function TripSheetBills() {
                         <TableCell sx={cell}>
                           {b.cuc_desc}
                           {b.route_order == null && <Chip size="small" label="Not on route" sx={{ ml: 1, height: 20 }} />}
+                          {b.route_order == null && canMap && (
+                            <Button
+                              size="small" startIcon={<AddLocationAlt />} sx={{ py: 0, ml: 0.5, minWidth: 0 }}
+                              onClick={(e) => { e.stopPropagation(); openMap(b, b.cuc_desc); }}
+                            >
+                              Map
+                            </Button>
+                          )}
                         </TableCell>
                         <TableCell sx={{ ...cell, whiteSpace: 'nowrap' }}>{b.company_branch}</TableCell>
                         <TableCell sx={num}>{money(b.net_amount)}</TableCell>
@@ -538,6 +582,9 @@ export default function TripSheetBills() {
         )}
       </Box>
       {confirmDialog}
+      {sheet && (
+        <MapToRouteDialog customer={mapping} tripCode={sheet.trip_code} onClose={() => setMapping(null)} onMapped={afterMapped} />
+      )}
       <Menu anchorEl={printMenu} open={Boolean(printMenu)} onClose={() => setPrintMenu(null)}>
         <MenuItem onClick={() => print('branch')}>
           <ListItemText primary="Summary by branch" secondary="Cases per customer and company - branch (landscape)" />
