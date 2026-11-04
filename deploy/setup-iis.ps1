@@ -54,12 +54,33 @@ if ($oldService) {
 }
 
 # --- Copy files ----------------------------------------------------------------
-if (Test-Path "IIS:\AppPools\$ApiSiteName") {
-  if ((Get-WebAppPoolState -Name $ApiSiteName).Value -ne 'Stopped') {
-    Write-Host 'Stopping backend...'
-    Stop-WebAppPool -Name $ApiSiteName
-    Start-Sleep -Seconds 3
+# Waits (up to $Seconds) while an app pool is Starting or Stopping; returns its state then
+function Wait-AppPoolSettled([string]$Name, [int]$Seconds = 60) {
+  for ($i = 0; $i -lt $Seconds; $i++) {
+    $state = (Get-WebAppPoolState -Name $Name).Value
+    if ($state -ne 'Starting' -and $state -ne 'Stopping') { return $state }
+    Start-Sleep -Seconds 1
   }
+  return (Get-WebAppPoolState -Name $Name).Value
+}
+
+if (Test-Path "IIS:\AppPools\$ApiSiteName") {
+  # IIS refuses to stop a pool that is still starting or stopping ("cannot accept control messages"), so let it settle first
+  $state = Wait-AppPoolSettled $ApiSiteName
+  if ($state -ne 'Stopped') {
+    Write-Host 'Stopping backend...'
+    try { Stop-WebAppPool -Name $ApiSiteName -ErrorAction Stop } catch { Write-Host "  ($($_.Exception.Message.Trim()) - waiting and retrying)" }
+    if ((Wait-AppPoolSettled $ApiSiteName) -ne 'Stopped') {
+      Start-Sleep -Seconds 3
+      Stop-WebAppPool -Name $ApiSiteName -ErrorAction SilentlyContinue
+      Wait-AppPoolSettled $ApiSiteName | Out-Null
+    }
+  }
+  # Make sure no backend node.exe is left holding the files that are about to be replaced
+  Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -and $_.CommandLine -like "*$apiDir*" } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  Start-Sleep -Seconds 2
 }
 
 $envFile = Join-Path $apiDir '.env'
@@ -120,7 +141,10 @@ if (-not (Test-Path "IIS:\Sites\$SiteName")) {
   New-Website -Name $SiteName -Port $Port -PhysicalPath $siteDir -ApplicationPool $SiteName | Out-Null
 }
 
-Start-WebAppPool -Name $ApiSiteName -ErrorAction SilentlyContinue
+if ((Wait-AppPoolSettled $ApiSiteName) -ne 'Started') { Start-WebAppPool -Name $ApiSiteName -ErrorAction SilentlyContinue }
+if ((Wait-AppPoolSettled $ApiSiteName) -ne 'Started') {
+  Write-Host "Warning: app pool '$ApiSiteName' did not start; start it in IIS Manager (Application Pools)." -ForegroundColor Yellow
+}
 foreach ($site in $ApiSiteName, $SiteName) { Start-Website -Name $site -ErrorAction SilentlyContinue }
 
 if (-not (Get-NetFirewallRule -DisplayName "$SiteName HTTP $Port" -ErrorAction SilentlyContinue)) {
