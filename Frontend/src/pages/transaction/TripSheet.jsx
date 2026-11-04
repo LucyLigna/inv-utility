@@ -1,7 +1,10 @@
-import { LockOpenOutlined, LockOutlined } from '@mui/icons-material';
+import { useMemo, useRef, useState } from 'react';
+import { Box } from '@mui/material';
+import { LockOpenOutlined, LockOutlined, PhonelinkLock } from '@mui/icons-material';
 import MasterScreen from '../../components/MasterScreen';
 import { StatusCell } from '../../components/ListTable';
 import api from '../../api';
+import DriverCodeDialog from './DriverCodeDialog';
 
 // '2026-11-03' -> '03-11-2026'
 const showDate = (d) => (d ? d.split('-').reverse().join('-') : '');
@@ -19,7 +22,19 @@ const dateColumn = (label, field) => ({
   label, field, width: 120, align: 'center', render: (r) => showDate(r[field]), exportValue: (r) => showDate(r[field]),
 });
 
-const config = {
+// The driver code is shown with its validity; an expired one is greyed out
+const driverCodeCell = (r) => {
+  if (!r.driver_pin) return '';
+  const expired = new Date((r.driver_pin_till || '').replace(' ', 'T')) < new Date();
+  return (
+    <Box sx={{ color: expired ? '#aaa' : 'inherit', lineHeight: 1.2 }}>
+      <b style={{ letterSpacing: 2 }}>{r.driver_pin}</b>
+      <Box sx={{ fontSize: 12, color: expired ? '#aaa' : '#666' }}>{expired ? 'expired ' : 'till '}{showDateTime(r.driver_pin_till)}</Box>
+    </Box>
+  );
+};
+
+const makeConfig = (openDriverCode) => ({
   title: 'Trip Sheet',
   entity: 'Trip Sheet',
   apiPath: '/trip-sheets',
@@ -37,6 +52,11 @@ const config = {
     dateColumn('End Date', 'end_date'),
     { label: 'Bills', field: 'total_bills', width: 80, align: 'right' },
     { label: 'Cases', field: 'total_pack_qty', width: 80, align: 'right' },
+    {
+      label: 'Driver Code', field: 'driver_pin', width: 150, render: driverCodeCell,
+      exportValue: (r) => (r.driver_pin ? `${r.driver_pin} till ${showDateTime(r.driver_pin_till)}` : ''),
+    },
+    { label: 'Delivered', field: 'delivered_customers', width: 90, align: 'right' },
     { label: 'Status', field: 'status', width: 140, render: (r) => <StatusCell status={r.status} /> },
     {
       label: 'Closed On',
@@ -57,6 +77,13 @@ const config = {
   },
   // Close: the trip is done. The sheet and its bills are then fixed and it leaves Trip Sheet - Bill Details.
   actions: [{
+    // Driver code for the delivery page: 4 digits, active between the times chosen in the dialog
+    label: 'Driver Code',
+    icon: <PhonelinkLock />,
+    availableFor: (r) => r.status === 'Active',
+    request: (r) => openDriverCode(r),
+    done: (r) => `Driver code for ${r.tsc_no} generated`,
+  }, {
     label: 'Close',
     icon: <LockOutlined />,
     confirm: (r) => ({
@@ -145,8 +172,26 @@ const config = {
     if (f.end_date && f.end_date < f.start_date) return 'End date cannot be before the start date';
     return null;
   },
-};
+});
 
 export default function TripSheet() {
-  return <MasterScreen config={config} />;
+  const [codeSheet, setCodeSheet] = useState(null);
+  const finish = useRef(null);
+  // The action waits for the dialog; it resolves false when no code was generated, so nothing is reported
+  const config = useMemo(() => makeConfig((row) => new Promise((resolve) => {
+    finish.current = resolve;
+    setCodeSheet(row);
+  })), []);
+  return (
+    <>
+      <MasterScreen config={config} />
+      <DriverCodeDialog
+        sheet={codeSheet}
+        onClose={(changed) => {
+          setCodeSheet(null);
+          finish.current?.(changed);
+        }}
+      />
+    </>
+  );
 }

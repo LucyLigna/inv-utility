@@ -13,6 +13,7 @@ import TripSheet from './pages/transaction/TripSheet';
 import TripSheetBills from './pages/transaction/TripSheetBills';
 import Users from './pages/admin/Users';
 import UserLog from './pages/admin/UserLog';
+import DriverApp from './pages/driver/DriverApp';
 
 const SCREENS = [
   ['/master/vehicle', <Vehicle />],
@@ -41,6 +42,9 @@ function Guard({ children }) {
 
 export default function App() {
   const { user, checking } = useAuth();
+  const { pathname } = useLocation();
+  // The driver delivery page has its own login (mobile number + driver code), separate from the users'
+  if (pathname === '/driver' || pathname.startsWith('/driver/')) return <DriverApp />;
   if (checking) {
     return <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CircularProgress /></Box>;
   }

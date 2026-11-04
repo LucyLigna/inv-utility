@@ -15,6 +15,8 @@ app.use(express.json());
 // Open without logging in
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', require('./routes/auth'));
+// Driver delivery page: its own login (mobile number + the trip sheet's driver code)
+app.use('/api/driver', require('./routes/driverApp'));
 
 // Everything else needs a logged-in user. Changes on a screen's API need the right to that screen
 // (sys_programfile codes); administrators have every right.

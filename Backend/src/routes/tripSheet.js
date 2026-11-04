@@ -12,7 +12,10 @@ const day = (col) => `DATE_FORMAT(s.${col}, '%Y-%m-%d') AS ${col}`;
 const SELECT = `SELECT s.ts_code AS code, s.tsc_no, ${day('entry_date')}, s.trip_code, r.name AS route_name,
   s.driver_code, d.name AS driver_name, ${day('loading_date')}, ${day('start_date')}, ${day('end_date')}, s.remarks,
   s.status, DATE_FORMAT(s.cancelled_at, '%Y-%m-%d %H:%i') AS cancelled_at,
-  DATE_FORMAT(s.closed_at, '%Y-%m-%d %H:%i') AS closed_at, s.total_bills, s.total_pack_qty
+  DATE_FORMAT(s.closed_at, '%Y-%m-%d %H:%i') AS closed_at, s.total_bills, s.total_pack_qty, d.mobile AS driver_mobile,
+  s.driver_pin, DATE_FORMAT(s.driver_pin_from, '%Y-%m-%d %H:%i') AS driver_pin_from,
+  DATE_FORMAT(s.driver_pin_till, '%Y-%m-%d %H:%i') AS driver_pin_till,
+  (SELECT COUNT(*) FROM trip_sheet_delivery v WHERE v.ts_code = s.ts_code) AS delivered_customers
   FROM trip_sheet s
   JOIN trip_route r ON r.code = s.trip_code
   JOIN driver d ON d.code = s.driver_code`;
@@ -194,6 +197,35 @@ router.post('/:code/reopen', async (req, res, next) => {
       [req.user.user_code, req.params.code]
     );
     res.json({ code: Number(req.params.code), tsc_no: await sheetNo(req.params.code), status: 'Active' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Driver code: { from, till } ('YYYY-MM-DD HH:mm') -> a new random 4-digit code, valid only in that window.
+// The driver logs in to the delivery page (/driver) with the mobile number from Driver Master and this code.
+const DATETIME_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}$/;
+router.post('/:code/driver-code', async (req, res, next) => {
+  const from = String(req.body.from || '').trim();
+  const till = String(req.body.till || '').trim();
+  if (!DATETIME_RE.test(from) || !DATETIME_RE.test(till)) return res.status(400).json({ message: 'Active from and till must be a date and time' });
+  if (till <= from) return res.status(400).json({ message: 'Active till must be after active from' });
+  try {
+    const [[sheet]] = await pool.query(
+      'SELECT s.status, d.name AS driver_name, d.mobile FROM trip_sheet s JOIN driver d ON d.code = s.driver_code WHERE s.ts_code = ?',
+      [req.params.code]
+    );
+    if (!sheet) return res.status(404).json({ message: 'Trip sheet not found' });
+    if (sheet.status !== 'Active') return res.status(400).json({ message: 'A driver code can be given only for an active trip sheet' });
+    if (!sheet.mobile) {
+      return res.status(400).json({ message: `Driver ${sheet.driver_name} has no mobile number. Add it in Driver Master first; the driver logs in with it.` });
+    }
+    const pin = String(require('crypto').randomInt(0, 10000)).padStart(4, '0');
+    await pool.query(
+      'UPDATE trip_sheet SET driver_pin = ?, driver_pin_from = ?, driver_pin_till = ?, updated_by = ? WHERE ts_code = ?',
+      [pin, from.replace('T', ' '), till.replace('T', ' '), req.user.user_code, req.params.code]
+    );
+    res.json({ code: Number(req.params.code), tsc_no: await sheetNo(req.params.code), driver_pin: pin, from, till });
   } catch (err) {
     next(err);
   }

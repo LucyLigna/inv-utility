@@ -4,7 +4,7 @@ import {
   TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import {
-  AddCircleOutline, AddLocationAlt, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, PlaylistAdd, Refresh,
+  AddCircleOutline, AddLocationAlt, CheckCircle, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, PlaylistAdd, Refresh,
   Save, Sort, SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
@@ -87,6 +87,8 @@ export default function TripSheetBills() {
   const [printMenu, setPrintMenu] = useState(null); // element the print-format menu opens from
   const [printFormat, setPrintFormat] = useState('branch');
   const [contacts, setContacts] = useState({}); // mobile and sales executive per customer, for printing
+  const [qr, setQr] = useState({}); // delivery QR per customer, for the customer-wise print
+  const [deliveries, setDeliveries] = useState({}); // customers the driver has scanned as delivered
   const [confirm, confirmDialog] = useConfirm();
   const [mapping, setMapping] = useState(null); // customer being mapped to the route
   const { user } = useAuth();
@@ -143,6 +145,7 @@ export default function TripSheetBills() {
         ? [...new Set(data.bills.map((b) => b.group_key))]
         : null;
       setSheet(data.sheet);
+      setDeliveries(data.deliveries || {});
       setSelected(map);
       setCustomOrder(order);
       setSavedKey(snapshot(map, order));
@@ -243,6 +246,13 @@ export default function TripSheetBills() {
       try {
         const { data } = await api.get(`/trip-sheet-bills/${sheet.code}`);
         setContacts(data.customers || {});
+        // qrcode is a CommonJS package: its functions come on the default export
+        const qrcode = await import('qrcode');
+        const { toDataURL } = qrcode.default || qrcode;
+        const images = await Promise.all(Object.entries(data.codes || {}).map(async ([key, c]) => (
+          [key, { code: c.code, image: await toDataURL(c.qr, { margin: 0, width: 240, errorCorrectionLevel: 'M' }) }]
+        )));
+        setQr(Object.fromEntries(images));
       } catch (err) {
         setError(errorMessage(err));
         return;
@@ -426,6 +436,17 @@ export default function TripSheetBills() {
                               </IconButton>
                               {g.name}
                               {!g.onRoute && <Chip size="small" label="Not on route" sx={{ ml: 0.5, height: 20, fontWeight: 400 }} />}
+                              {deliveries[g.key] && (
+                                <Tooltip title={`Scanned by ${deliveries[g.key].driver_name || 'the driver'}${deliveries[g.key].latitude ? ` at ${deliveries[g.key].latitude}, ${deliveries[g.key].longitude}` : ''}`}>
+                                  <Chip
+                                    size="small"
+                                    color="success"
+                                    icon={<CheckCircle />}
+                                    label={`Delivered ${showDate(deliveries[g.key].delivered_at.slice(0, 10))} ${deliveries[g.key].delivered_at.slice(11)}`}
+                                    sx={{ ml: 0.5, height: 20, fontWeight: 400 }}
+                                  />
+                                </Tooltip>
+                              )}
                               {!g.onRoute && canMap && (
                                 <Button size="small" startIcon={<AddLocationAlt />} onClick={() => openMap(g.bills[0], g.name)} sx={{ py: 0, minWidth: 0 }}>
                                   Map
@@ -592,7 +613,7 @@ export default function TripSheetBills() {
           <ListItemText primary="Customer-wise bills" secondary="Each customer's bills, with mobile and sales executive" />
         </MenuItem>
       </Menu>
-      <TripSheetPrint sheet={sheet} groups={groups} format={printFormat} contacts={contacts} />
+      <TripSheetPrint sheet={sheet} groups={groups} format={printFormat} contacts={contacts} qr={qr} />
       <Snackbar open={Boolean(notice)} autoHideDuration={3000} onClose={() => setNotice('')} message={notice} />
     </Box>
   );

@@ -37,13 +37,15 @@ CREATE TABLE IF NOT EXISTS driver (
   code        INT          NOT NULL AUTO_INCREMENT PRIMARY KEY,
   name        VARCHAR(100) NOT NULL,
   short_code  VARCHAR(10)  NULL,
+  mobile      VARCHAR(15)  NULL, -- the driver logs in to the delivery page with this number
   status      ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
   created_by   INT          DEFAULT NULL, -- user_code of the user who created the row
   updated_by   INT          DEFAULT NULL, -- user_code of the user who last changed the row
   created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_driver_name (name),
-  UNIQUE KEY uq_driver_short_code (short_code)
+  UNIQUE KEY uq_driver_short_code (short_code),
+  UNIQUE KEY uq_driver_mobile (mobile)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS trip_route (
@@ -112,12 +114,33 @@ CREATE TABLE IF NOT EXISTS trip_sheet (
   -- Totals of the bills in trip_sheet_bills, updated when the bill details are saved
   total_bills    INT        NOT NULL DEFAULT 0,
   total_pack_qty INT        NOT NULL DEFAULT 0,
+  -- Driver code: 4 digits the driver enters with the mobile number to open the delivery page; valid only
+  -- between driver_pin_from and driver_pin_till
+  driver_pin       CHAR(4)  DEFAULT NULL,
+  driver_pin_from  DATETIME DEFAULT NULL,
+  driver_pin_till  DATETIME DEFAULT NULL,
   created_by   INT          DEFAULT NULL, -- user_code of the user who created the row
   updated_by   INT          DEFAULT NULL, -- user_code of the user who last changed the row
   inp_dt_tm    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_trip_sheet_no (tsc_no),
   CONSTRAINT fk_trip_sheet_route FOREIGN KEY (trip_code) REFERENCES trip_route (code),
   CONSTRAINT fk_trip_sheet_driver FOREIGN KEY (driver_code) REFERENCES driver (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Deliveries marked by the driver: one row per customer on the sheet (the main customer its bills are grouped
+-- under, as on the customer-wise print), when the driver scans that customer's QR code
+CREATE TABLE IF NOT EXISTS trip_sheet_delivery (
+  ts_code      INT          NOT NULL,
+  company_code VARCHAR(3)   NOT NULL,
+  ba_code      VARCHAR(4)   NOT NULL,
+  cu_code      VARCHAR(8)   NOT NULL,
+  delivered_at DATETIME     NOT NULL,
+  driver_code  INT          NOT NULL,
+  latitude     DECIMAL(10,7) DEFAULT NULL, -- phone location at the scan, when the driver allowed it
+  longitude    DECIMAL(10,7) DEFAULT NULL,
+  accuracy_m   INT          DEFAULT NULL,
+  PRIMARY KEY (ts_code, company_code, ba_code, cu_code),
+  CONSTRAINT fk_trip_sheet_delivery_sheet FOREIGN KEY (ts_code) REFERENCES trip_sheet (ts_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Bills (from salesdetails) carried on a trip sheet. A bill can be on only one trip sheet that isn't Cancelled.

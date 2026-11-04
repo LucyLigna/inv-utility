@@ -97,25 +97,31 @@ function BranchSummary({ groups, allBills }) {
   );
 }
 
-// Customer-wise: for each customer its place, mobile and sales executive, then its bills
+// Customer-wise: for each customer its place, mobile and sales executive, then its bills, and on the right the
+// delivery QR code the driver scans at that customer (with its code underneath, to type if the scan fails)
 // Each customer takes a quarter of the page (A4 portrait leaves about 273 mm), four customers to a page
 const CUSTOMERS_PER_PAGE = 4;
 const CUSTOMER_BLOCK_HEIGHT = '60mm';
+const QR_SIZE = '30mm';
 
-function CustomerBills({ groups, allBills, contacts }) {
+function CustomerBills({ groups, allBills, contacts, qr }) {
   const info = { ...td, fontSize: 12, background: '#f7f7f7' };
   return (
     <>
       {groups.map((g, i) => {
         const c = contacts[g.key] || {};
+        const q = qr[g.key];
         const pageEnds = (i + 1) % CUSTOMERS_PER_PAGE === 0 && i < groups.length - 1;
         return (
           <div
             key={g.key}
-            style={{ breakInside: 'avoid', minHeight: CUSTOMER_BLOCK_HEIGHT, ...(pageEnds && { breakAfter: 'page' }) }}
+            style={{
+              breakInside: 'avoid', minHeight: CUSTOMER_BLOCK_HEIGHT, display: 'flex', alignItems: 'flex-start', gap: '3mm',
+              ...(pageEnds && { breakAfter: 'page' }),
+            }}
           >
             {/* One box per customer: its details on top, then its bills */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+            <table style={{ flex: 1, minWidth: 0, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
               <colgroup>
                 <col style={{ width: '25%' }} />
                 <col style={{ width: '30%' }} />
@@ -156,6 +162,13 @@ function CustomerBills({ groups, allBills, contacts }) {
                 )}
               </tbody>
             </table>
+            {q && (
+              <div style={{ width: QR_SIZE, flex: 'none', textAlign: 'center', border: '1px solid #555', padding: '1.5mm' }}>
+                <img src={q.image} alt={`Delivery QR ${q.code}`} style={{ width: '100%', display: 'block' }} />
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, marginTop: 2 }}>{q.code}</div>
+                <div style={{ fontSize: 9 }}>Scan on delivery</div>
+              </div>
+            )}
           </div>
         );
       })}
@@ -168,8 +181,8 @@ function CustomerBills({ groups, allBills, contacts }) {
 
 // Printed trip sheet. format: 'branch' (summary per company - branch, landscape) | 'customer' (bills per customer).
 // groups: the Selected Customer groups from the screen ({ key, name, place, bills }); contacts: mobile and sales
-// executive per customer key.
-export default function TripSheetPrint({ sheet, groups, format = 'branch', contacts = {} }) {
+// executive per customer key; qr: delivery QR per customer key ({ code, image }).
+export default function TripSheetPrint({ sheet, groups, format = 'branch', contacts = {}, qr = {} }) {
   if (!sheet) return null;
   const allBills = groups.flatMap((g) => g.bills);
 
@@ -192,7 +205,7 @@ export default function TripSheetPrint({ sheet, groups, format = 'branch', conta
           </div>
         </div>
         {format === 'customer'
-          ? <CustomerBills groups={groups} allBills={allBills} contacts={contacts} />
+          ? <CustomerBills groups={groups} allBills={allBills} contacts={contacts} qr={qr} />
           : <BranchSummary groups={groups} allBills={allBills} />}
       </div>
     </>,

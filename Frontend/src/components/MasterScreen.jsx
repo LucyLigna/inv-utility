@@ -46,7 +46,7 @@ const span = (cols) => ({ xs: 'span 12', md: `span ${cols}` });
 //   deletable     optional { confirm(row) -> question, done(row) -> message }: adds a Delete button
 //                 (DELETE apiPath/:code; the server decides what deleting means, e.g. marking it cancelled)
 //                 deletable.blockedReason(row) -> message when the row can't be deleted yet, shown instead of asking
-//   actions       optional extra buttons for the selected row: [{ label, icon, request(row) -> promise,
+//   actions       optional extra buttons for the selected row: [{ label, icon, request(row) -> promise (resolving false = nothing changed),
 //                 confirm(row) -> { title, message, confirmLabel, cancelLabel }, blockedReason(row, listRows), done(row),
 //                 availableFor(row) -> whether the button is enabled (default: rows that aren't locked) }]
 //   isLocked      optional (row) => true for rows that can only be viewed (e.g. cancelled ones)
@@ -113,7 +113,8 @@ export default function MasterScreen({ config }) {
     }
     if (a.confirm && !(await confirm(a.confirm(row)))) return;
     try {
-      await a.request(row);
+      // request may open its own dialog and resolve false when the user closes it without a change
+      if ((await a.request(row)) === false) return;
       await load();
       setError('');
       if (a.done) setNotice(a.done(row));

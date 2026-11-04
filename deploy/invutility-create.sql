@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS `driver` (
   `code` int NOT NULL AUTO_INCREMENT,
   `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `short_code` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `mobile` varchar(15) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `status` enum('Active','Inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Active',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -87,7 +88,8 @@ CREATE TABLE IF NOT EXISTS `driver` (
   `updated_by` int DEFAULT NULL COMMENT 'user_code of the user who last changed the row',
   PRIMARY KEY (`code`),
   UNIQUE KEY `uq_driver_name` (`name`),
-  UNIQUE KEY `uq_driver_short_code` (`short_code`)
+  UNIQUE KEY `uq_driver_short_code` (`short_code`),
+  UNIQUE KEY `uq_driver_mobile` (`mobile`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- route
@@ -327,6 +329,9 @@ CREATE TABLE IF NOT EXISTS `trip_sheet` (
   `closed_at` datetime DEFAULT NULL,
   `total_bills` int NOT NULL DEFAULT '0',
   `total_pack_qty` int NOT NULL DEFAULT '0',
+  `driver_pin` char(4) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `driver_pin_from` datetime DEFAULT NULL,
+  `driver_pin_till` datetime DEFAULT NULL,
   `inp_dt_tm` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `created_by` int DEFAULT NULL COMMENT 'user_code of the user who created the row',
   `updated_by` int DEFAULT NULL COMMENT 'user_code of the user who last changed the row',
@@ -353,6 +358,21 @@ CREATE TABLE IF NOT EXISTS `trip_sheet_bills` (
   PRIMARY KEY (`ts_code`,`company_code`,`ba_code`,`sm_slno`),
   KEY `ix_trip_sheet_bills_bill` (`company_code`,`ba_code`,`sm_slno`),
   CONSTRAINT `fk_trip_sheet_bills_sheet` FOREIGN KEY (`ts_code`) REFERENCES `trip_sheet` (`ts_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- trip_sheet_delivery
+CREATE TABLE IF NOT EXISTS `trip_sheet_delivery` (
+  `ts_code` int NOT NULL,
+  `company_code` varchar(3) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `ba_code` varchar(4) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `cu_code` varchar(8) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `delivered_at` datetime NOT NULL,
+  `driver_code` int NOT NULL,
+  `latitude` decimal(10,7) DEFAULT NULL,
+  `longitude` decimal(10,7) DEFAULT NULL,
+  `accuracy_m` int DEFAULT NULL,
+  PRIMARY KEY (`ts_code`,`company_code`,`ba_code`,`cu_code`),
+  CONSTRAINT `fk_trip_sheet_delivery_sheet` FOREIGN KEY (`ts_code`) REFERENCES `trip_sheet` (`ts_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- vehiclenumber

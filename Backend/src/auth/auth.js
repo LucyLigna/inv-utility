@@ -47,6 +47,13 @@ async function createToken(userCode) {
   return `${payload}.${sign(payload, await signingKey())}`;
 }
 
+// Token for the driver delivery page: { d: driver_code, ts: ts_code, pin } until the driver code expires.
+// It carries no user, so requireAuth refuses it; requireDriver re-checks the sheet and code on every call.
+async function createDriverToken(data, expiresAt) {
+  const payload = Buffer.from(JSON.stringify({ ...data, exp: expiresAt })).toString('base64url');
+  return `${payload}.${sign(payload, await signingKey())}`;
+}
+
 async function readToken(token) {
   const [payload, signature] = String(token || '').split('.');
   if (!payload || !signature) return null;
@@ -111,6 +118,6 @@ const requireAdmin = (req, res, next) => (req.user.isAdmin
   : res.status(403).json({ message: 'Only an administrator can do this' }));
 
 module.exports = {
-  hashPassword, checkPassword, passwordProblem, createToken, loadUser, publicUser,
+  hashPassword, checkPassword, passwordProblem, createToken, createDriverToken, readToken, signingKey, loadUser, publicUser,
   requireAuth, requireRight, requireAdmin,
 };
