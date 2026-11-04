@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState } from 'react';
 import { Box } from '@mui/material';
-import { LockOpenOutlined, LockOutlined, PhonelinkLock } from '@mui/icons-material';
+import { Groups, LockOpenOutlined, LockOutlined, PhonelinkLock, TaskAlt } from '@mui/icons-material';
 import MasterScreen from '../../components/MasterScreen';
 import { StatusCell } from '../../components/ListTable';
 import api from '../../api';
 import DriverCodeDialog from './DriverCodeDialog';
+import TripSheetCustomersDialog from './TripSheetCustomersDialog';
 
 // '2026-11-03' -> '03-11-2026'
 const showDate = (d) => (d ? d.split('-').reverse().join('-') : '');
@@ -34,7 +35,7 @@ const driverCodeCell = (r) => {
   );
 };
 
-const makeConfig = (openDriverCode) => ({
+const makeConfig = (openDriverCode, openCustomers) => ({
   title: 'Trip Sheet',
   entity: 'Trip Sheet',
   apiPath: '/trip-sheets',
@@ -57,6 +58,19 @@ const makeConfig = (openDriverCode) => ({
       exportValue: (r) => (r.driver_pin ? `${r.driver_pin} till ${showDateTime(r.driver_pin_till)}` : ''),
     },
     { label: 'Delivered', field: 'delivered_customers', width: 90, align: 'right' },
+    {
+      // Bills marked complete in Trip Sheet - Bill Details: no more bills can be added
+      label: 'Bills Complete',
+      field: 'bills_completed_at',
+      width: 150,
+      align: 'center',
+      render: (r) => (r.bills_completed_at ? (
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: '#2e7d32' }}>
+          <TaskAlt sx={{ fontSize: 16 }} />{showDateTime(r.bills_completed_at)}
+        </Box>
+      ) : ''),
+      exportValue: (r) => showDateTime(r.bills_completed_at),
+    },
     { label: 'Status', field: 'status', width: 140, render: (r) => <StatusCell status={r.status} /> },
     {
       label: 'Closed On',
@@ -77,6 +91,12 @@ const makeConfig = (openDriverCode) => ({
   },
   // Close: the trip is done. The sheet and its bills are then fixed and it leaves Trip Sheet - Bill Details.
   actions: [{
+    // The sheet's customers and bills, as on Trip Sheet - Bill Details (view only); any sheet, any status
+    label: 'Customers',
+    icon: <Groups />,
+    availableFor: () => true,
+    request: (r) => openCustomers(r),
+  }, {
     // Driver code for the delivery page: 4 digits, active between the times chosen in the dialog
     label: 'Driver Code',
     icon: <PhonelinkLock />,
@@ -178,10 +198,18 @@ export default function TripSheet() {
   const [codeSheet, setCodeSheet] = useState(null);
   const finish = useRef(null);
   // The action waits for the dialog; it resolves false when no code was generated, so nothing is reported
-  const config = useMemo(() => makeConfig((row) => new Promise((resolve) => {
-    finish.current = resolve;
-    setCodeSheet(row);
-  })), []);
+  const [customersSheet, setCustomersSheet] = useState(null);
+  const config = useMemo(() => makeConfig(
+    (row) => new Promise((resolve) => {
+      finish.current = resolve;
+      setCodeSheet(row);
+    }),
+    // Only views: the list doesn't need reloading afterwards
+    (row) => {
+      setCustomersSheet(row);
+      return Promise.resolve(false);
+    },
+  ), []);
   return (
     <>
       <MasterScreen config={config} />
@@ -192,6 +220,7 @@ export default function TripSheet() {
           finish.current?.(changed);
         }}
       />
+      <TripSheetCustomersDialog sheet={customersSheet} onClose={() => setCustomersSheet(null)} />
     </>
   );
 }

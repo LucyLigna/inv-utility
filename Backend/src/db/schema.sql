@@ -119,6 +119,9 @@ CREATE TABLE IF NOT EXISTS trip_sheet (
   driver_pin       CHAR(4)  DEFAULT NULL,
   driver_pin_from  DATETIME DEFAULT NULL,
   driver_pin_till  DATETIME DEFAULT NULL,
+  -- Bills complete (Trip Sheet - Bill Details): from then on no bill can be added to or removed from the sheet
+  bills_completed_at DATETIME DEFAULT NULL,
+  bills_completed_by INT      DEFAULT NULL, -- user_code
   created_by   INT          DEFAULT NULL, -- user_code of the user who created the row
   updated_by   INT          DEFAULT NULL, -- user_code of the user who last changed the row
   inp_dt_tm    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,

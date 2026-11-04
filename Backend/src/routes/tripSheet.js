@@ -15,7 +15,8 @@ const SELECT = `SELECT s.ts_code AS code, s.tsc_no, ${day('entry_date')}, s.trip
   DATE_FORMAT(s.closed_at, '%Y-%m-%d %H:%i') AS closed_at, s.total_bills, s.total_pack_qty, d.mobile AS driver_mobile,
   s.driver_pin, DATE_FORMAT(s.driver_pin_from, '%Y-%m-%d %H:%i') AS driver_pin_from,
   DATE_FORMAT(s.driver_pin_till, '%Y-%m-%d %H:%i') AS driver_pin_till,
-  (SELECT COUNT(*) FROM trip_sheet_delivery v WHERE v.ts_code = s.ts_code) AS delivered_customers
+  (SELECT COUNT(*) FROM trip_sheet_delivery v WHERE v.ts_code = s.ts_code) AS delivered_customers,
+  DATE_FORMAT(s.bills_completed_at, '%Y-%m-%d %H:%i') AS bills_completed_at
   FROM trip_sheet s
   JOIN trip_route r ON r.code = s.trip_code
   JOIN driver d ON d.code = s.driver_code`;

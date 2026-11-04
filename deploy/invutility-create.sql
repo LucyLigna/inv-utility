@@ -332,6 +332,8 @@ CREATE TABLE IF NOT EXISTS `trip_sheet` (
   `driver_pin` char(4) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `driver_pin_from` datetime DEFAULT NULL,
   `driver_pin_till` datetime DEFAULT NULL,
+  `bills_completed_at` datetime DEFAULT NULL,
+  `bills_completed_by` int DEFAULT NULL,
   `inp_dt_tm` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `created_by` int DEFAULT NULL COMMENT 'user_code of the user who created the row',
   `updated_by` int DEFAULT NULL COMMENT 'user_code of the user who last changed the row',

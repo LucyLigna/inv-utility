@@ -38,8 +38,10 @@ async function findSheet(tsCode) {
   const [[sheet]] = await pool.query(
     `SELECT s.ts_code AS code, s.tsc_no, s.trip_code, r.name AS route_name, d.name AS driver_name,
        DATE_FORMAT(s.loading_date, '%Y-%m-%d') AS loading_date, DAYNAME(s.loading_date) AS loading_day,
-       s.status, s.total_bills, s.total_pack_qty
+       s.status, s.total_bills, s.total_pack_qty,
+       DATE_FORMAT(s.bills_completed_at, '%Y-%m-%d %H:%i') AS bills_completed_at, cu.username AS bills_completed_by
      FROM trip_sheet s JOIN trip_route r ON r.code = s.trip_code JOIN driver d ON d.code = s.driver_code
+     LEFT JOIN sys_users cu ON cu.user_code = s.bills_completed_by
      WHERE s.ts_code = ?`,
     [tsCode]
   );

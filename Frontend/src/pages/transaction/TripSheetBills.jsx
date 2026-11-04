@@ -4,13 +4,14 @@ import {
   TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import {
-  AddCircleOutline, AddLocationAlt, CheckCircle, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, LocationOff, LocationOn, PlayArrow, PlaylistAdd, Refresh,
+  AddCircleOutline, AddLocationAlt, CheckCircle, LockOpenOutlined, TaskAlt, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, LocationOff, LocationOn, PlayArrow, PlaylistAdd, Refresh,
   Save, Sort, SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
 import { useConfirm } from '../../components/ConfirmDialog';
 import TripSheetPrint, { exportSummaryExcel } from './TripSheetPrint';
 import MapToRouteDialog from './MapToRouteDialog';
+import { arrange, billKey, byCustomer, savedOrder } from './sheetGroups';
 import { useAuth } from '../../auth';
 import api, { errorMessage } from '../../api';
 
@@ -20,45 +21,9 @@ const head = { ...cell, fontWeight: 700, bgcolor: '#f5f6fa', color: '#111' };
 const num = { ...cell, textAlign: 'right', whiteSpace: 'nowrap' };
 const dateSx = { width: 160, '& input': { py: 1 } };
 
-const billKey = (b) => `${b.company_code}|${b.ba_code}|${b.sm_slno}`;
 const money = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const showDate = (d) => (d ? d.split('-').reverse().join('-') : '');
 const sheetLabel = (s) => `${s.tsc_no} · ${s.route_name} · ${showDate(s.loading_date)} (${(s.loading_day || '').slice(0, 3)})`;
-// Selected bills grouped under their main customer (a sub customer's bills go under its main customer on the
-// route), in the route's visiting order; customers not on the route come last
-function byCustomer(bills) {
-  const groups = new Map();
-  for (const b of bills) {
-    if (!groups.has(b.group_key)) {
-      groups.set(b.group_key, {
-        key: b.group_key, name: b.group_name, company_branch: b.group_branch, place: b.group_place,
-        order: b.group_order, onRoute: b.route_order != null, bills: [], cases: 0, amount: 0,
-      });
-    }
-    const g = groups.get(b.group_key);
-    g.bills.push(b);
-    g.cases += Number(b.pack_qty) || 0;
-    g.amount += Number(b.net_amount) || 0;
-  }
-  const list = [...groups.values()].sort((a, b) => (a.order ?? 1e9) - (b.order ?? 1e9) || String(a.name).localeCompare(String(b.name)));
-  list.forEach((g) => g.bills.sort((a, b) => (a.route_order ?? 1e9) - (b.route_order ?? 1e9) || String(a.smc_no).localeCompare(String(b.smc_no))));
-  return list;
-}
-
-// Groups in the user's order (customOrder: group keys), or the route's order when there is none.
-// A customer added after reordering goes before the first customer that comes later on the route.
-function arrange(routeSorted, customOrder) {
-  if (!customOrder) return routeSorted;
-  const byKey = new Map(routeSorted.map((g) => [g.key, g]));
-  const result = customOrder.filter((k) => byKey.has(k)).map((k) => byKey.get(k));
-  const rank = (g) => g.order ?? 1e9;
-  routeSorted.filter((g) => !customOrder.includes(g.key)).forEach((g) => {
-    const at = result.findIndex((x) => rank(x) > rank(g));
-    result.splice(at === -1 ? result.length : at, 0, g);
-  });
-  return result;
-}
-
 // What would be saved (bills in delivery order), as a string, to tell whether anything changed
 const snapshot = (selected, customOrder) => JSON.stringify(
   arrange(byCustomer([...selected.values()]), customOrder).flatMap((g) => g.bills.map(billKey))
@@ -129,6 +94,8 @@ export default function TripSheetBills() {
   }, []);
 
   const dirty = Boolean(sheet) && snapshot(selected, customOrder) !== savedKey;
+  // Bills marked complete: the sheet's bills can only be viewed, printed and exported
+  const complete = Boolean(sheet?.bills_completed_at);
 
   const process = async (s = picked) => {
     if (!s) return;
@@ -141,9 +108,7 @@ export default function TripSheetBills() {
       const { data } = await api.get(`/trip-sheet-bills/${s.code}`);
       const map = new Map(data.bills.map((b) => [billKey(b), b]));
       // Bills come in their saved order; keep the customers in that order if it was saved
-      const order = data.bills.some((b) => b.sheet_order != null)
-        ? [...new Set(data.bills.map((b) => b.group_key))]
-        : null;
+      const order = savedOrder(data.bills);
       setSheet(data.sheet);
       setDeliveries(data.deliveries || {});
       setSelected(map);
@@ -229,6 +194,42 @@ export default function TripSheetBills() {
     }
   };
 
+  // Mark complete: no bill can be added or removed afterwards. Unsaved changes are saved first.
+  const markComplete = async () => {
+    const ok = await confirm({
+      title: `Mark ${sheet.tsc_no} complete?`,
+      message: `${dirty ? 'Your changes will be saved first. ' : ''}After this, no bill can be added to or removed from this trip sheet. Printing, export and delivery scanning carry on as before.`,
+      cancelLabel: 'Not yet',
+      confirmLabel: 'Mark complete',
+    });
+    if (!ok || (dirty && !(await save()))) return;
+    try {
+      const { data } = await api.post(`/trip-sheet-bills/${sheet.code}/complete`);
+      setSheet(data.sheet);
+      setNotice(`${sheet.tsc_no} marked complete`);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
+  // Administrators can undo "complete" so the bills can be changed again
+  const reopenBills = async () => {
+    const ok = await confirm({
+      title: `Reopen the bills of ${sheet.tsc_no}?`,
+      message: 'Bills can then be added and removed again, until the sheet is marked complete again.',
+      cancelLabel: 'Keep complete',
+      confirmLabel: 'Reopen bills',
+    });
+    if (!ok) return;
+    try {
+      const { data } = await api.post(`/trip-sheet-bills/${sheet.code}/reopen-bills`);
+      setSheet(data.sheet);
+      setNotice(`Bills of ${sheet.tsc_no} reopened`);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
   // Prints the sheet as on screen; unsaved changes are saved first so the paper matches what is stored
   // format: 'branch' (cases per company - branch) | 'customer' (each customer's bills, with mobile and sales executive)
   const print = async (format) => {
@@ -307,7 +308,10 @@ export default function TripSheetBills() {
     <Box>
       <ActionBar
         left={[
-          { label: 'Save', icon: <Save />, onClick: save, disabled: !dirty },
+          { label: 'Save', icon: <Save />, onClick: save, disabled: !dirty || complete },
+          complete
+            ? { label: 'Reopen Bills', icon: <LockOpenOutlined />, onClick: reopenBills, disabled: !user.isAdmin }
+            : { label: 'Mark Complete', icon: <TaskAlt />, onClick: markComplete, disabled: !sheet || !groups.length },
           { label: 'Refresh', icon: <Refresh />, onClick: () => process(sheet), disabled: !sheet },
           { label: 'Print', icon: <Print />, onClick: (e) => setPrintMenu(e.currentTarget), disabled: !sheet || !groups.length },
           {
@@ -353,6 +357,7 @@ export default function TripSheetBills() {
                   ['Loading', `${showDate(sheet.loading_date)} (${sheet.loading_day})`],
                   ['Driver', sheet.driver_name],
                   ['Saved', `${sheet.total_bills} bills · ${sheet.total_pack_qty} cases`],
+                  ['Bills', complete ? `Complete ${showDate(sheet.bills_completed_at.slice(0, 10))} ${sheet.bills_completed_at.slice(11)}` : 'Open'],
                 ].map(([label, value]) => (
                   <Box key={label}>
                     <Box sx={{ color: '#666', fontSize: 12 }}>{label}</Box>
@@ -376,7 +381,7 @@ export default function TripSheetBills() {
                   {dirty && <Box component="span" sx={{ color: '#c77700', fontWeight: 400 }}> · not saved</Box>}
                 </Typography>
                 <Box>
-                  {!inRouteOrder && (
+                  {!inRouteOrder && !complete && (
                     <Tooltip title="Put the customers back in the order of Trip Route Wise Customers">
                       <Button size="small" startIcon={<Sort />} onClick={() => setCustomOrder(null)}>Route order</Button>
                     </Tooltip>
@@ -393,9 +398,11 @@ export default function TripSheetBills() {
                 </Box>
               </Box>
               <Typography variant="body2" color="text.secondary" mb={1}>
-                {inRouteOrder
-                  ? 'In the order of Trip Route Wise Customers. Drag the grip on a customer to change the order for this trip sheet.'
-                  : 'In your order for this trip sheet. Drag the grip on a customer to change it.'}
+                {complete
+                  ? 'Bills are complete: they can be viewed, printed and exported, but not changed.'
+                  : inRouteOrder
+                    ? 'In the order of Trip Route Wise Customers. Drag the grip on a customer to change the order for this trip sheet.'
+                    : 'In your order for this trip sheet. Drag the grip on a customer to change it.'}
               </Typography>
               <TableContainer sx={{ maxHeight: 'calc(100vh - 340px)' }}>
                 <Table stickyHeader size="small" sx={{ borderCollapse: 'collapse' }}>
@@ -416,12 +423,13 @@ export default function TripSheetBills() {
                         <TableRow
                           key={g.key}
                           hover
-                          onDragOver={(e) => e.preventDefault()}
-                          onDrop={() => { moveGroup(dragKey, g.key); setDragKey(null); }}
+                          onDragOver={(e) => !complete && e.preventDefault()}
+                          onDrop={() => { if (!complete) moveGroup(dragKey, g.key); setDragKey(null); }}
                           sx={{ bgcolor: dragKey === g.key ? '#e3e8f8' : '#f8f9fc' }}
                         >
                           <TableCell sx={{ ...cell, fontWeight: 700 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              {!complete && (
                               <Box
                                 draggable
                                 onDragStart={(e) => { setDragKey(g.key); e.dataTransfer.setDragImage(e.currentTarget.closest('tr'), 20, 20); }}
@@ -431,6 +439,7 @@ export default function TripSheetBills() {
                               >
                                 <DragIndicator fontSize="small" sx={{ color: '#9aa0ab' }} />
                               </Box>
+                              )}
                               <IconButton size="small" sx={{ p: 0.25 }} onClick={() => toggleGroup(g.key)} aria-label={open ? 'hide bills' : 'show bills'}>
                                 {open ? <KeyboardArrowDown fontSize="small" /> : <KeyboardArrowRight fontSize="small" />}
                               </IconButton>
@@ -479,17 +488,19 @@ export default function TripSheetBills() {
                           <TableCell sx={{ ...num, fontWeight: 700 }}>{g.cases}</TableCell>
                           <TableCell sx={{ ...num, fontWeight: 700 }}>{g.bills.length}</TableCell>
                           <TableCell sx={{ ...cell, py: 0 }} align="center">
-                            <Tooltip title="Remove all bills of this customer">
-                              <IconButton size="small" onClick={() => removeBills(g.bills)}><DeleteOutline fontSize="small" /></IconButton>
-                            </Tooltip>
+                            {!complete && (
+                              <Tooltip title="Remove all bills of this customer">
+                                <IconButton size="small" onClick={() => removeBills(g.bills)}><DeleteOutline fontSize="small" /></IconButton>
+                              </Tooltip>
+                            )}
                           </TableCell>
                         </TableRow>,
                         ...(open ? g.bills.map((b) => (
                           <TableRow
                             key={billKey(b)}
                             hover
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={() => { moveGroup(dragKey, g.key); setDragKey(null); }}
+                            onDragOver={(e) => !complete && e.preventDefault()}
+                            onDrop={() => { if (!complete) moveGroup(dragKey, g.key); setDragKey(null); }}
                           >
                             <TableCell sx={{ ...cell, pl: 7 }} colSpan={2}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -504,9 +515,11 @@ export default function TripSheetBills() {
                             <TableCell sx={num}>{b.pack_qty}</TableCell>
                             <TableCell sx={num}>1</TableCell>
                             <TableCell sx={{ ...cell, py: 0 }} align="center">
-                              <Tooltip title="Remove this bill">
-                                <IconButton size="small" onClick={() => removeBills([b])}><DeleteOutline fontSize="small" /></IconButton>
-                              </Tooltip>
+                              {!complete && (
+                                <Tooltip title="Remove this bill">
+                                  <IconButton size="small" onClick={() => removeBills([b])}><DeleteOutline fontSize="small" /></IconButton>
+                                </Tooltip>
+                              )}
                             </TableCell>
                           </TableRow>
                         )) : []),
@@ -536,7 +549,16 @@ export default function TripSheetBills() {
               </TableContainer>
             </Paper>
 
-            {/* Right: bills to add; ones already on the sheet are not shown */}
+            {/* Right: bills to add; ones already on the sheet are not shown. A completed sheet takes no more bills. */}
+            {complete ? (
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Alert severity="success" icon={<TaskAlt />}>
+                  <b>Bills complete</b> since {showDate(sheet.bills_completed_at.slice(0, 10))} {sheet.bills_completed_at.slice(11)}
+                  {sheet.bills_completed_by ? ` (by ${sheet.bills_completed_by})` : ''}. No bill can be added to or removed from this
+                  trip sheet.{user.isAdmin ? ' Reopen Bills lets them be changed again.' : ' An administrator can reopen the bills.'}
+                </Alert>
+              </Paper>
+            ) : (
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap', mb: 1.5 }}>
                 <Typography sx={{ fontWeight: 700, mr: 'auto' }}>Bills</Typography>
@@ -618,6 +640,7 @@ export default function TripSheetBills() {
                 </Table>
               </TableContainer>
             </Paper>
+            )}
           </Box>
         )}
       </Box>

@@ -122,7 +122,7 @@ router.put('/:tsCode', async (req, res, next) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [[sheet]] = await conn.query('SELECT ts_code, tsc_no, status FROM trip_sheet WHERE ts_code = ? FOR UPDATE', [req.params.tsCode]);
+    const [[sheet]] = await conn.query('SELECT ts_code, tsc_no, status, bills_completed_at FROM trip_sheet WHERE ts_code = ? FOR UPDATE', [req.params.tsCode]);
     if (!sheet) {
       await conn.rollback();
       return res.status(404).json({ message: 'Trip sheet not found' });
@@ -130,6 +130,10 @@ router.put('/:tsCode', async (req, res, next) => {
     if (sheet.status !== 'Active') {
       await conn.rollback();
       return res.status(400).json({ message: `This trip sheet is ${sheet.status.toLowerCase()}; its bills can no longer be changed` });
+    }
+    if (sheet.bills_completed_at) {
+      await conn.rollback();
+      return res.status(400).json({ message: `The bills of ${sheet.tsc_no} are marked complete; no bill can be added or removed` });
     }
     let bills = [];
     if (keys.length) {
@@ -187,6 +191,41 @@ router.put('/:tsCode', async (req, res, next) => {
     next(err);
   } finally {
     conn.release();
+  }
+});
+
+// Mark the sheet's bills complete: from then on no bill can be added or removed (Save refuses)
+router.post('/:tsCode/complete', async (req, res, next) => {
+  try {
+    const [[sheet]] = await pool.query('SELECT tsc_no, status, bills_completed_at, total_bills FROM trip_sheet WHERE ts_code = ?', [req.params.tsCode]);
+    if (!sheet) return res.status(404).json({ message: 'Trip sheet not found' });
+    if (sheet.status !== 'Active') return res.status(400).json({ message: `This trip sheet is ${sheet.status.toLowerCase()}` });
+    if (sheet.bills_completed_at) return res.status(400).json({ message: `The bills of ${sheet.tsc_no} are already marked complete` });
+    if (!sheet.total_bills) return res.status(400).json({ message: 'Add and save bills before marking the trip sheet complete' });
+    await pool.query(
+      'UPDATE trip_sheet SET bills_completed_at = NOW(), bills_completed_by = ?, updated_by = ? WHERE ts_code = ? AND bills_completed_at IS NULL',
+      [req.user.user_code, req.user.user_code, req.params.tsCode]
+    );
+    res.json({ code: Number(req.params.tsCode), tsc_no: sheet.tsc_no, sheet: await findSheet(req.params.tsCode) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Undo "complete" so bills can be changed again; administrators only
+router.post('/:tsCode/reopen-bills', async (req, res, next) => {
+  if (!req.user.isAdmin) return res.status(403).json({ message: 'Only an administrator can reopen the bills of a completed trip sheet' });
+  try {
+    const [[sheet]] = await pool.query('SELECT tsc_no, status FROM trip_sheet WHERE ts_code = ?', [req.params.tsCode]);
+    if (!sheet) return res.status(404).json({ message: 'Trip sheet not found' });
+    if (sheet.status !== 'Active') return res.status(400).json({ message: `This trip sheet is ${sheet.status.toLowerCase()}` });
+    await pool.query(
+      'UPDATE trip_sheet SET bills_completed_at = NULL, bills_completed_by = NULL, updated_by = ? WHERE ts_code = ?',
+      [req.user.user_code, req.params.tsCode]
+    );
+    res.json({ code: Number(req.params.tsCode), tsc_no: sheet.tsc_no, sheet: await findSheet(req.params.tsCode) });
+  } catch (err) {
+    next(err);
   }
 });
 
