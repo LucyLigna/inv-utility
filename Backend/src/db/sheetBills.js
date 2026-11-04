@@ -12,7 +12,7 @@ const CUSTOMER_NAME = "COALESCE(NULLIF(s.cuc_desc, ''), c.cuc_desc, CONCAT('Cust
 // route_order: where the customer sits on the sheet's route (NULL when it isn't on it).
 // group_*: the main customer the bill belongs under: for a sub customer on the route, its main customer
 // (the nearest 'Main' row above it in Trip Route Wise Customers); otherwise the customer itself.
-const BILL_FIELDS = `s.company_code, s.ba_code, s.sm_slno, s.smc_no, s.cu_code, ${CUSTOMER_NAME} AS cuc_desc, s.net_amount, s.pack_qty,
+const BILL_FIELDS = `s.company_code, s.ba_code, s.sm_slno, s.smc_no, s.cu_code, ${CUSTOMER_NAME} AS cuc_desc, s.net_amount, s.pack_qty, s.eway_billno,
   s.tpc_desc, s.transporter_type, DATE_FORMAT(${BILL_DATE}, '%Y-%m-%d') AS bill_date, c.cuc_place,
   COALESCE(b.company_branch_code, b.company_branch, CONCAT(s.company_code, ' - ', COALESCE(b.brc_desc, s.ba_code))) AS company_branch,
   rc.route_order, rc.main_sub, rc.group_order,

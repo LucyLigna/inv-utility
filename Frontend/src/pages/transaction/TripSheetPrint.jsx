@@ -123,23 +123,25 @@ function CustomerBills({ groups, allBills, contacts, qr }) {
             {/* One box per customer: its details on top, then its bills */}
             <table style={{ flex: 1, minWidth: 0, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
               <colgroup>
-                <col style={{ width: '25%' }} />
-                <col style={{ width: '30%' }} />
-                <col style={{ width: '25%' }} />
-                <col style={{ width: '20%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '22%' }} />
+                <col style={{ width: '24%' }} />
+                <col style={{ width: '19%' }} />
+                <col style={{ width: '17%' }} />
               </colgroup>
               <thead>
                 <tr>
-                  <td style={{ ...info, fontSize: 13 }} colSpan={2}><b>{i + 1}. {g.name}</b></td>
+                  <td style={{ ...info, fontSize: 13 }} colSpan={3}><b>{i + 1}. {g.name}</b></td>
                   <td style={info} colSpan={2}>Place: <b>{g.place || '—'}</b></td>
                 </tr>
                 <tr>
-                  <td style={info} colSpan={2}>Sales Executive: <b>{c.sales_executive || '—'}</b></td>
+                  <td style={info} colSpan={3}>Sales Executive: <b>{c.sales_executive || '—'}</b></td>
                   <td style={info} colSpan={2}>Mobile #: <b>{c.mobile || '—'}</b></td>
                 </tr>
                 <tr>
                   <th style={{ ...th, textAlign: 'left' }}>Bill #</th>
                   <th style={{ ...th, textAlign: 'left' }}>Branch Code</th>
+                  <th style={{ ...th, textAlign: 'left' }}>E-way Bill #</th>
                   <th style={{ ...th, textAlign: 'right' }}>Amount</th>
                   <th style={{ ...th, textAlign: 'right' }}>No. of Packs</th>
                 </tr>
@@ -149,13 +151,14 @@ function CustomerBills({ groups, allBills, contacts, qr }) {
                   <tr key={`${b.company_code}|${b.ba_code}|${b.sm_slno}`}>
                     <td style={td}>{b.smc_no}</td>
                     <td style={td}>{b.company_branch}</td>
+                    <td style={td}>{b.eway_billno || ''}</td>
                     <td style={numTd}>{money(b.net_amount)}</td>
                     <td style={numTd}>{b.pack_qty}</td>
                   </tr>
                 ))}
                 {g.bills.length > 1 && (
                   <tr>
-                    <td style={{ ...td, fontWeight: 700 }} colSpan={2}>Total ({g.bills.length} bills)</td>
+                    <td style={{ ...td, fontWeight: 700 }} colSpan={3}>Total ({g.bills.length} bills)</td>
                     <td style={{ ...numTd, fontWeight: 700 }}>{money(amount(g.bills))}</td>
                     <td style={{ ...numTd, fontWeight: 700 }}>{packs(g.bills)}</td>
                   </tr>
