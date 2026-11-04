@@ -4,7 +4,7 @@ import {
   TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import {
-  AddCircleOutline, AddLocationAlt, CheckCircle, NoteAdd, LockOpenOutlined, TaskAlt, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, LocationOff, LocationOn, PlayArrow, PlaylistAdd, Refresh,
+  AddCircleOutline, AddLocationAlt, CheckCircle, EditOutlined, NoteAdd, LockOpenOutlined, TaskAlt, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, LocationOff, LocationOn, PlayArrow, PlaylistAdd, Refresh,
   Save, Sort, SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
@@ -58,6 +58,7 @@ export default function TripSheetBills() {
   const [confirm, confirmDialog] = useConfirm();
   const [mapping, setMapping] = useState(null); // customer being mapped to the route
   const [manualOpen, setManualOpen] = useState(false); // Add manual bill pop-up
+  const [editingBill, setEditingBill] = useState(null); // manual bill open in the edit pop-up
   const { user } = useAuth();
   // Mapping changes Trip Route Wise Customers, so it needs the right to that screen
   const canMap = user.isAdmin || user.programs.includes('P0201');
@@ -186,6 +187,27 @@ export default function TripSheetBills() {
     setManualOpen(false);
     addBills([bill]);
     setNotice(`Manual bill ${bill.smc_no} added to the sheet. Press Save to keep it.`);
+  };
+
+  // A manual bill was edited (the server saved it, also on this sheet if it is on it): show the new details.
+  // Its key changes when its company - branch changed.
+  const manualSaved = (result) => {
+    const { bill, oldKey, onSheet } = result;
+    setEditingBill(null);
+    const wasClean = !dirty;
+    const next = new Map(selected);
+    if (next.has(oldKey)) {
+      next.delete(oldKey);
+      next.set(billKey(bill), bill);
+    }
+    setSelected(next);
+    if (onSheet) {
+      setSheet(result.sheet);
+      // Already saved on this sheet: unless other changes are waiting, there is nothing left to save
+      setSavedKey(wasClean ? snapshot(next, customOrder) : savedKey.replace(JSON.stringify(oldKey), JSON.stringify(billKey(bill))));
+    }
+    setReloadKey((k) => k + 1);
+    setNotice(`Manual bill ${bill.smc_no} saved`);
   };
 
   // A manual bill that is not on any trip sheet can be deleted from the Bills list
@@ -537,6 +559,13 @@ export default function TripSheetBills() {
                                 {b.cuc_desc !== g.name && <Box component="span" sx={{ fontSize: 13 }}>· {b.cuc_desc}</Box>}
                                 <Box component="span" sx={{ color: '#666', fontSize: 13 }}>({b.company_branch})</Box>
                                 {b.is_manual ? <Chip size="small" label="Manual" sx={{ height: 18, fontSize: 11 }} /> : null}
+                                {b.is_manual && !complete ? (
+                                  <Tooltip title="Edit this manual bill">
+                                    <IconButton size="small" sx={{ p: 0.25 }} onClick={() => setEditingBill(b)} aria-label="edit manual bill">
+                                      <EditOutlined fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                ) : null}
                               </Box>
                             </TableCell>
                             <TableCell sx={{ ...num, color: '#444' }}>{b.net_amount == null ? '—' : `₹ ${money(b.net_amount)}`}</TableCell>
@@ -645,6 +674,11 @@ export default function TripSheetBills() {
                           {b.is_manual ? (
                             <>
                               <Chip size="small" label="Manual" sx={{ ml: 0.5, height: 18, fontSize: 11 }} />
+                              <Tooltip title="Edit this manual bill">
+                                <IconButton size="small" sx={{ p: 0.25 }} onClick={(e) => { e.stopPropagation(); setEditingBill(b); }} aria-label="edit manual bill">
+                                  <EditOutlined fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
                               <Tooltip title="Delete this manual bill">
                                 <IconButton size="small" sx={{ p: 0.25 }} onClick={(e) => { e.stopPropagation(); deleteManual(b); }}>
                                   <DeleteOutline fontSize="small" />
@@ -689,6 +723,10 @@ export default function TripSheetBills() {
       </Box>
       {confirmDialog}
       <ManualBillDialog sheet={sheet} open={manualOpen && Boolean(sheet)} onClose={() => setManualOpen(false)} onAdded={manualAdded} />
+      <ManualBillDialog
+        sheet={sheet} open={Boolean(editingBill) && Boolean(sheet)} bill={editingBill}
+        onClose={() => setEditingBill(null)} onSaved={manualSaved}
+      />
       {sheet && (
         <MapToRouteDialog customer={mapping} tripCode={sheet.trip_code} onClose={() => setMapping(null)} onMapped={afterMapped} />
       )}
