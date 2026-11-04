@@ -457,7 +457,7 @@ export default function TripSheetBills() {
                                 <b>{b.smc_no}</b>
                                 <Box component="span" sx={{ color: '#666', fontSize: 13 }}>{showDateTime(b.bill_date)}</Box>
                                 {b.cuc_desc !== g.name && <Box component="span" sx={{ fontSize: 13 }}>· {b.cuc_desc}</Box>}
-                                {b.company_branch !== g.company_branch && <Box component="span" sx={{ color: '#666', fontSize: 13 }}>({b.company_branch})</Box>}
+                                <Box component="span" sx={{ color: '#666', fontSize: 13 }}>({b.company_branch})</Box>
                               </Box>
                             </TableCell>
                             <TableCell sx={{ ...num, color: '#444' }}>₹ {money(b.net_amount)}</TableCell>
