@@ -443,6 +443,8 @@ export default function TripRouteCustomers() {
                       <TableCell sx={head}>Place</TableCell>
                       <TableCell sx={head}>Route</TableCell>
                       <TableCell sx={head}>Company - Branch</TableCell>
+                      <TableCell sx={head}>GST Number</TableCell>
+                      <TableCell sx={head}>Mobile</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -461,7 +463,9 @@ export default function TripRouteCustomers() {
                           </TableCell>
                           <TableCell sx={cell}>{c.cuc_place}</TableCell>
                           <TableCell sx={cell}>{c.route_name}</TableCell>
-                          <TableCell sx={cell}>{c.company_branch}</TableCell>
+                          <TableCell sx={cell}>{c.company_branch_code}</TableCell>
+                          <TableCell sx={cell}>{c.gst_number}</TableCell>
+                          <TableCell sx={cell}>{c.cuc_mobile}</TableCell>
                         </TableRow>
                       );
                     })}
@@ -529,6 +533,8 @@ export default function TripRouteCustomers() {
                       <TableCell sx={head}>Name</TableCell>
                       <TableCell sx={head}>Place</TableCell>
                       <TableCell sx={head}>Company - Branch</TableCell>
+                      <TableCell sx={head}>GST Number</TableCell>
+                      <TableCell sx={head}>Mobile</TableCell>
                       <TableCell sx={head}>Route</TableCell>
                     </TableRow>
                   </TableHead>
@@ -545,14 +551,16 @@ export default function TripRouteCustomers() {
                             {added && <Chip size="small" label="Already in list" sx={{ ml: 1, height: 20 }} />}
                           </TableCell>
                           <TableCell sx={cell}>{c.cuc_place}</TableCell>
-                          <TableCell sx={cell}>{c.company_branch}</TableCell>
+                          <TableCell sx={cell}>{c.company_branch_code}</TableCell>
+                          <TableCell sx={cell}>{c.gst_number}</TableCell>
+                          <TableCell sx={cell}>{c.cuc_mobile}</TableCell>
                           <TableCell sx={cell}>{c.route_name}</TableCell>
                         </TableRow>
                       );
                     })}
                     {!list.length && (
                       <TableRow>
-                        <TableCell colSpan={5} align="center" sx={{ ...cell, color: '#888' }}>No customers to show</TableCell>
+                        <TableCell colSpan={7} align="center" sx={{ ...cell, color: '#888' }}>No customers to show</TableCell>
                       </TableRow>
                     )}
                   </TableBody>

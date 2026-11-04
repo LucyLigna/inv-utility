@@ -6,7 +6,8 @@ const SEARCH_LIMIT = 200;
 
 // Fields the screen shows for a customer, from view_customer_list (alias v)
 const CUSTOMER_FIELDS = `v.company_code, v.ba_code, v.cu_code, v.cuc_desc, v.cuc_place, v.route_name,
-  v.company_name, v.branch_name, COALESCE(v.company_branch, CONCAT(v.company_code, ' - ', v.branch_name)) AS company_branch,  v.gst_number, v.cuc_mobile`;
+  v.company_name, v.branch_name, COALESCE(v.company_branch, CONCAT(v.company_code, ' - ', v.branch_name)) AS company_branch,
+  COALESCE(v.company_branch_code, v.company_branch, CONCAT(v.company_code, ' - ', v.branch_name)) AS company_branch_code, v.gst_number, v.cuc_mobile`;
 
 // Limits view_customer_list (alias v) to the active branches of trip route ?
 const IN_ROUTE_BRANCHES = `(v.company_code, v.ba_code) IN (
