@@ -40,7 +40,12 @@ export default function MapToRouteDialog({ customer, tripCode, onClose, onMapped
       api.get(`/trip-route-customers/${tripCode}/map-options`, { params }),
       api.get(`/trip-route-customers/${tripCode}/related`, { params }),
     ])
-      .then(([o, r]) => { setOptions(o.data); setRelated(r.data); })
+      .then(([o, r]) => {
+        setOptions(o.data);
+        setRelated(r.data);
+        // When customers on the route share the GST number / mobile, default to going under their main customer
+        if (o.data.mains.length) setPlace(keyOf(o.data.mains[0]));
+      })
       .catch((err) => setError(errorMessage(err)));
   }, [customer, tripCode]);
 
@@ -121,7 +126,6 @@ export default function MapToRouteDialog({ customer, tripCode, onClose, onMapped
                       Customers on this route already have the same {matchLabel}. Add it as:
                     </Typography>
                     <RadioGroup value={place} onChange={(e) => setPlace(e.target.value)}>
-                      <FormControlLabel value="main" control={<Radio size="small" />} label="A new main customer (at the end of the route)" />
                       {options.mains.map((m) => (
                         <FormControlLabel
                           key={keyOf(m)}
@@ -130,6 +134,7 @@ export default function MapToRouteDialog({ customer, tripCode, onClose, onMapped
                           label={<>Sub customer under <b>{m.name}</b> <Box component="span" sx={{ color: '#666', fontSize: 13 }}>(same {matchLabel} as {m.matched.join(', ')})</Box></>}
                         />
                       ))}
+                      <FormControlLabel value="main" control={<Radio size="small" />} label="A new main customer (at the end of the route)" />
                     </RadioGroup>
                   </Alert>
                 )}
