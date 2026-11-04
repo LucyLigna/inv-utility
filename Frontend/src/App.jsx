@@ -12,6 +12,7 @@ import TripRouteCustomers from './pages/transaction/TripRouteCustomers';
 import TripSheet from './pages/transaction/TripSheet';
 import TripSheetBills from './pages/transaction/TripSheetBills';
 import Users from './pages/admin/Users';
+import UserLog from './pages/admin/UserLog';
 
 const SCREENS = [
   ['/master/vehicle', <Vehicle />],
@@ -21,6 +22,7 @@ const SCREENS = [
   ['/transaction/trip-sheet', <TripSheet />],
   ['/transaction/trip-sheet-bills', <TripSheetBills />],
   ['/admin/users', <Users />],
+  ['/admin/user-log', <UserLog />],
 ];
 
 // A screen opens only if the user has the right to it

@@ -29,8 +29,12 @@ export function AuthProvider({ children }) {
     setUser(u);
   };
   const signOut = () => {
-    setToken(null);
-    setUser(null);
+    // Recorded in the user log; the screen logs out whether or not that call gets through
+    api.post('/auth/logout').catch(() => {});
+    setTimeout(() => {
+      setToken(null);
+      setUser(null);
+    }, 0);
   };
   // Screens the user may open (Home is always allowed)
   const canOpen = (route) => route === '/' || Boolean(user?.routes.includes(route));

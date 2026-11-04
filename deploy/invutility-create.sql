@@ -83,6 +83,8 @@ CREATE TABLE IF NOT EXISTS `driver` (
   `status` enum('Active','Inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Active',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_by` int DEFAULT NULL COMMENT 'user_code of the user who created the row',
+  `updated_by` int DEFAULT NULL COMMENT 'user_code of the user who last changed the row',
   PRIMARY KEY (`code`),
   UNIQUE KEY `uq_driver_name` (`name`),
   UNIQUE KEY `uq_driver_short_code` (`short_code`)
@@ -199,6 +201,23 @@ CREATE TABLE IF NOT EXISTS `sys_settings` (
   PRIMARY KEY (`setting_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- sys_user_log
+CREATE TABLE IF NOT EXISTS `sys_user_log` (
+  `log_id` bigint NOT NULL AUTO_INCREMENT,
+  `log_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `user_code` int DEFAULT NULL,
+  `username` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `action` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `program_code` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `module` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `record_ref` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `details` varchar(1000) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `ip_address` varchar(45) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  PRIMARY KEY (`log_id`),
+  KEY `ix_sys_user_log_time` (`log_time`),
+  KEY `ix_sys_user_log_user` (`user_code`,`log_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- sys_users
 CREATE TABLE IF NOT EXISTS `sys_users` (
   `user_code` int NOT NULL AUTO_INCREMENT,
@@ -210,6 +229,8 @@ CREATE TABLE IF NOT EXISTS `sys_users` (
   `last_login_at` datetime DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_by` int DEFAULT NULL COMMENT 'user_code of the user who created the row',
+  `updated_by` int DEFAULT NULL COMMENT 'user_code of the user who last changed the row',
   PRIMARY KEY (`user_code`),
   UNIQUE KEY `uq_sys_users_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -218,6 +239,8 @@ CREATE TABLE IF NOT EXISTS `sys_users` (
 CREATE TABLE IF NOT EXISTS `sys_user_rights` (
   `user_code` int NOT NULL,
   `program_code` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_by` int DEFAULT NULL COMMENT 'user_code of the user who created the row',
+  `updated_by` int DEFAULT NULL COMMENT 'user_code of the user who last changed the row',
   PRIMARY KEY (`user_code`,`program_code`),
   KEY `fk_user_rights_program` (`program_code`),
   CONSTRAINT `fk_user_rights_program` FOREIGN KEY (`program_code`) REFERENCES `sys_programfile` (`program_code`),
@@ -248,6 +271,8 @@ CREATE TABLE IF NOT EXISTS `trip_route` (
   `status` enum('Active','Inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Active',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_by` int DEFAULT NULL COMMENT 'user_code of the user who created the row',
+  `updated_by` int DEFAULT NULL COMMENT 'user_code of the user who last changed the row',
   PRIMARY KEY (`code`),
   UNIQUE KEY `uq_trip_route_name` (`name`),
   UNIQUE KEY `uq_trip_route_short_code` (`short_code`)
@@ -261,6 +286,8 @@ CREATE TABLE IF NOT EXISTS `trip_route_branches` (
   `status` enum('Active','Inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Active',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_by` int DEFAULT NULL COMMENT 'user_code of the user who created the row',
+  `updated_by` int DEFAULT NULL COMMENT 'user_code of the user who last changed the row',
   PRIMARY KEY (`trip_code`,`company_code`,`ba_code`),
   CONSTRAINT `fk_trip_route_branches_route` FOREIGN KEY (`trip_code`) REFERENCES `trip_route` (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -275,6 +302,8 @@ CREATE TABLE IF NOT EXISTS `trip_route_customers` (
   `sort_order` int NOT NULL,
   `remarks` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `created_by` int DEFAULT NULL COMMENT 'user_code of the user who created the row',
+  `updated_by` int DEFAULT NULL COMMENT 'user_code of the user who last changed the row',
   PRIMARY KEY (`trip_code`,`company_code`,`ba_code`,`cu_code`),
   KEY `ix_trip_route_customers_order` (`trip_code`,`sort_order`),
   CONSTRAINT `fk_trip_route_customers_route` FOREIGN KEY (`trip_code`) REFERENCES `trip_route` (`code`)
@@ -297,6 +326,8 @@ CREATE TABLE IF NOT EXISTS `trip_sheet` (
   `total_bills` int NOT NULL DEFAULT '0',
   `total_pack_qty` int NOT NULL DEFAULT '0',
   `inp_dt_tm` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `created_by` int DEFAULT NULL COMMENT 'user_code of the user who created the row',
+  `updated_by` int DEFAULT NULL COMMENT 'user_code of the user who last changed the row',
   PRIMARY KEY (`ts_code`),
   UNIQUE KEY `uq_trip_sheet_no` (`tsc_no`),
   KEY `fk_trip_sheet_route` (`trip_code`),
@@ -315,6 +346,8 @@ CREATE TABLE IF NOT EXISTS `trip_sheet_bills` (
   `amount` decimal(12,2) DEFAULT NULL,
   `sort_order` int DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `created_by` int DEFAULT NULL COMMENT 'user_code of the user who created the row',
+  `updated_by` int DEFAULT NULL COMMENT 'user_code of the user who last changed the row',
   PRIMARY KEY (`ts_code`,`company_code`,`ba_code`,`sm_slno`),
   KEY `ix_trip_sheet_bills_bill` (`company_code`,`ba_code`,`sm_slno`),
   CONSTRAINT `fk_trip_sheet_bills_sheet` FOREIGN KEY (`ts_code`) REFERENCES `trip_sheet` (`ts_code`)
@@ -328,6 +361,8 @@ CREATE TABLE IF NOT EXISTS `vehiclenumber` (
   `status` enum('Active','Inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Active',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_by` int DEFAULT NULL COMMENT 'user_code of the user who created the row',
+  `updated_by` int DEFAULT NULL COMMENT 'user_code of the user who last changed the row',
   PRIMARY KEY (`code`),
   UNIQUE KEY `uq_vehicle_number` (`number`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -352,7 +387,8 @@ INSERT IGNORE INTO `sys_programfile` (`program_code`, `menu_code`, `name`, `rout
   ('P0201', 'M02', 'Trip Route Wise Customers', '/transaction/trip-route-customers', 1, 'Active'),
   ('P0202', 'M02', 'Trip Sheet', '/transaction/trip-sheet', 2, 'Active'),
   ('P0203', 'M02', 'Trip Sheet - Bill Details', '/transaction/trip-sheet-bills', 3, 'Active'),
-  ('P0301', 'M03', 'Users', '/admin/users', 1, 'Active');
+  ('P0301', 'M03', 'Users', '/admin/users', 1, 'Active'),
+  ('P0302', 'M03', 'User Log', '/admin/user-log', 2, 'Active');
 
 -- First administrator: sets a password at the first login
 INSERT IGNORE INTO `sys_users` (`username`, `user_type`) VALUES ('admin', 'Administrator');

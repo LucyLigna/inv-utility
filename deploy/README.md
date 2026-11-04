@@ -75,6 +75,7 @@ Everyone signs in with a user name and password. Users are managed by administra
 - **User types:** an **Administrator** has every right, including user administration. A **User** sees only the screens ticked under Rights; the API also refuses changes on other screens.
 - **Forgotten password / expire a password:** select the user in Users and press **Expire Password**. The old password stops working at once and the user creates a new one at the next login.
 - **Change password:** click your initial at the bottom of the blue bar on the left, then **Change password**. **Log out** is in the same menu.
+- **Who changed what:** every table the screens write to has `created_by` and `updated_by` (the `user_code` from `sys_users`). Every login, failed login, logout, password change and change made on a screen is written to `sys_user_log`; administrators read it under **Administration → User Log** (filter by date, user, action; export to Excel). Passwords are never logged.
 - A login lasts 12 hours. The key that signs logins is created automatically and kept in the `sys_settings` table, so nothing needs to be added to `.env`.
 
 ## Data sync from the INV API

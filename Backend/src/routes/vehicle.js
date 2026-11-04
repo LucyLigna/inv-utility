@@ -72,7 +72,10 @@ router.post('/', async (req, res, next) => {
   const v = validate(req.body);
   if (v.error) return res.status(400).json({ message: v.error });
   try {
-    const [result] = await pool.query('INSERT INTO vehiclenumber (number, make, status) VALUES (?, ?, ?)', [v.number, v.make, v.status]);
+    const [result] = await pool.query(
+      'INSERT INTO vehiclenumber (number, make, status, created_by, updated_by) VALUES (?, ?, ?, ?, ?)',
+      [v.number, v.make, v.status, req.user.user_code, req.user.user_code]
+    );
     res.status(201).json({ code: result.insertId, ...v });
   } catch (err) {
     handleDbError(err, res, next);
@@ -83,8 +86,8 @@ router.put('/:code', async (req, res, next) => {
   const v = validate(req.body);
   if (v.error) return res.status(400).json({ message: v.error });
   try {
-    const [result] = await pool.query('UPDATE vehiclenumber SET number = ?, make = ?, status = ? WHERE code = ?', [
-      v.number, v.make, v.status, req.params.code,
+    const [result] = await pool.query('UPDATE vehiclenumber SET number = ?, make = ?, status = ?, updated_by = ? WHERE code = ?', [
+      v.number, v.make, v.status, req.user.user_code, req.params.code,
     ]);
     if (!result.affectedRows) return res.status(404).json({ message: 'Vehicle not found' });
     res.json({ code: Number(req.params.code), ...v });

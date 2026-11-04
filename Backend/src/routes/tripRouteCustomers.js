@@ -225,8 +225,9 @@ router.post('/:tripCode/map', async (req, res, next) => {
       position = (rows.length ? rows[rows.length - 1].sort_order : 0) + 1;
     }
     await conn.query(
-      'INSERT INTO trip_route_customers (trip_code, company_code, ba_code, cu_code, main_sub, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
-      [route.code, cust.company_code, cust.ba_code, cust.cu_code, mainSub, position]
+      `INSERT INTO trip_route_customers (trip_code, company_code, ba_code, cu_code, main_sub, sort_order, created_by, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [route.code, cust.company_code, cust.ba_code, cust.cu_code, mainSub, position, req.user.user_code, req.user.user_code]
     );
     await conn.commit();
     res.status(201).json({ ...cust, main_sub: mainSub, sort_order: position });
@@ -266,11 +267,23 @@ router.put('/:tripCode', async (req, res, next) => {
     const route = await findRoute(req.params.tripCode);
     if (!route) return res.status(404).json({ message: 'Route not found' });
     await conn.beginTransaction();
+    // Customers already on the route keep who added them (and when); the saver becomes updated_by for all
+    const [before] = await conn.query(
+      'SELECT company_code, ba_code, cu_code, created_by, created_at FROM trip_route_customers WHERE trip_code = ? FOR UPDATE',
+      [route.code]
+    );
+    const added = new Map(before.map((b) => [`${b.company_code}|${b.ba_code}|${b.cu_code}`, b]));
     await conn.query('DELETE FROM trip_route_customers WHERE trip_code = ?', [route.code]);
     if (customers.length) {
+      const me = req.user.user_code;
       await conn.query(
-        'INSERT INTO trip_route_customers (trip_code, company_code, ba_code, cu_code, main_sub, sort_order, remarks) VALUES ?',
-        [customers.map((c, i) => [route.code, c.company_code, c.ba_code, c.cu_code, c.main_sub, i + 1, c.remarks])]
+        `INSERT INTO trip_route_customers
+           (trip_code, company_code, ba_code, cu_code, main_sub, sort_order, remarks, created_by, created_at, updated_by) VALUES ?`,
+        [customers.map((c, i) => {
+          const old = added.get(keys[i]);
+          return [route.code, c.company_code, c.ba_code, c.cu_code, c.main_sub, i + 1, c.remarks,
+            old ? old.created_by : me, old ? old.created_at : new Date(), me];
+        })]
       );
     }
     await conn.commit();

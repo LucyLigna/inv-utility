@@ -68,9 +68,10 @@ router.post('/', async (req, res, next) => {
   const d = validate(req.body);
   if (d.error) return res.status(400).json({ message: d.error });
   try {
-    const [result] = await pool.query('INSERT INTO driver (name, short_code, status) VALUES (?, ?, ?)', [
-      d.name, d.short_code, d.status,
-    ]);
+    const [result] = await pool.query(
+      'INSERT INTO driver (name, short_code, status, created_by, updated_by) VALUES (?, ?, ?, ?, ?)',
+      [d.name, d.short_code, d.status, req.user.user_code, req.user.user_code]
+    );
     res.status(201).json({ code: result.insertId, ...d });
   } catch (err) {
     handleDbError(err, res, next);
@@ -81,8 +82,8 @@ router.put('/:code', async (req, res, next) => {
   const d = validate(req.body);
   if (d.error) return res.status(400).json({ message: d.error });
   try {
-    const [result] = await pool.query('UPDATE driver SET name = ?, short_code = ?, status = ? WHERE code = ?', [
-      d.name, d.short_code, d.status, req.params.code,
+    const [result] = await pool.query('UPDATE driver SET name = ?, short_code = ?, status = ?, updated_by = ? WHERE code = ?', [
+      d.name, d.short_code, d.status, req.user.user_code, req.params.code,
     ]);
     if (!result.affectedRows) return res.status(404).json({ message: 'Driver not found' });
     res.json({ code: Number(req.params.code), ...d });

@@ -71,7 +71,10 @@ function validate(body) {
   return { username, user_type: userType, status, rights };
 }
 
-async function saveRights(conn, userCode, rights) {
+// Screens kept from before keep who gave them; new ones are recorded against the administrator saving now
+async function saveRights(conn, userCode, rights, by) {
+  const [before] = await conn.query('SELECT program_code, created_by FROM sys_user_rights WHERE user_code = ?', [userCode]);
+  const givenBy = new Map(before.map((b) => [b.program_code, b.created_by]));
   await conn.query('DELETE FROM sys_user_rights WHERE user_code = ?', [userCode]);
   if (rights.length) {
     const [valid] = await conn.query(
@@ -79,7 +82,9 @@ async function saveRights(conn, userCode, rights) {
       [rights]
     );
     if (valid.length) {
-      await conn.query('INSERT INTO sys_user_rights (user_code, program_code) VALUES ?', [valid.map((v) => [userCode, v.program_code])]);
+      await conn.query('INSERT INTO sys_user_rights (user_code, program_code, created_by, updated_by) VALUES ?', [
+        valid.map((v) => [userCode, v.program_code, givenBy.has(v.program_code) ? givenBy.get(v.program_code) : by, by]),
+      ]);
     }
   }
 }
@@ -91,10 +96,11 @@ router.post('/', async (req, res, next) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [result] = await conn.query('INSERT INTO sys_users (username, user_type, status) VALUES (?, ?, ?)', [
-      u.username, u.user_type, u.status,
-    ]);
-    await saveRights(conn, result.insertId, u.rights);
+    const [result] = await conn.query(
+      'INSERT INTO sys_users (username, user_type, status, created_by, updated_by) VALUES (?, ?, ?, ?, ?)',
+      [u.username, u.user_type, u.status, req.user.user_code, req.user.user_code]
+    );
+    await saveRights(conn, result.insertId, u.rights, req.user.user_code);
     await conn.commit();
     res.status(201).json({ code: result.insertId, ...u });
   } catch (err) {
@@ -135,10 +141,10 @@ router.put('/:code', async (req, res, next) => {
         return res.status(400).json({ message: 'This is the only active administrator; there must always be one' });
       }
     }
-    await conn.query('UPDATE sys_users SET username = ?, user_type = ?, status = ? WHERE user_code = ?', [
-      u.username, u.user_type, u.status, code,
+    await conn.query('UPDATE sys_users SET username = ?, user_type = ?, status = ?, updated_by = ? WHERE user_code = ?', [
+      u.username, u.user_type, u.status, req.user.user_code, code,
     ]);
-    await saveRights(conn, code, u.rights);
+    await saveRights(conn, code, u.rights, req.user.user_code);
     await conn.commit();
     res.json({ code, ...u });
   } catch (err) {
@@ -158,11 +164,12 @@ router.post('/:code/expire-password', async (req, res, next) => {
   }
   try {
     const [result] = await pool.query(
-      'UPDATE sys_users SET password_hash = NULL, password_set_at = NULL WHERE user_code = ?',
-      [code]
+      'UPDATE sys_users SET password_hash = NULL, password_set_at = NULL, updated_by = ? WHERE user_code = ?',
+      [req.user.user_code, code]
     );
     if (!result.affectedRows) return res.status(404).json({ message: 'User not found' });
-    res.json({ code, has_password: false });
+    const [[row]] = await pool.query('SELECT username FROM sys_users WHERE user_code = ?', [code]);
+    res.json({ code, username: row.username, has_password: false });
   } catch (err) {
     next(err);
   }

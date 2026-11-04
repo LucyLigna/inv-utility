@@ -55,13 +55,15 @@ async function loadBranches(codes) {
 }
 
 // Keeps the ticked branches Active (adding new ones) and marks the rest of this route's branches Inactive
-async function saveBranches(conn, tripCode, branches) {
-  await conn.query("UPDATE trip_route_branches SET status = 'Inactive' WHERE trip_code = ?", [tripCode]);
+async function saveBranches(conn, tripCode, branches, userCode) {
+  await conn.query("UPDATE trip_route_branches SET status = 'Inactive', updated_by = ? WHERE trip_code = ? AND status = 'Active'", [
+    userCode, tripCode,
+  ]);
   if (!branches.length) return;
   await conn.query(
-    `INSERT INTO trip_route_branches (trip_code, company_code, ba_code, status) VALUES ?
-     AS new ON DUPLICATE KEY UPDATE status = new.status`,
-    [branches.map((b) => [tripCode, b.company_code, b.ba_code, 'Active'])]
+    `INSERT INTO trip_route_branches (trip_code, company_code, ba_code, status, created_by, updated_by) VALUES ?
+     AS new ON DUPLICATE KEY UPDATE status = new.status, updated_by = new.updated_by`,
+    [branches.map((b) => [tripCode, b.company_code, b.ba_code, 'Active', userCode, userCode])]
   );
 }
 
@@ -93,8 +95,8 @@ async function saveRoute(req, res, next, code) {
     let tripCode = code;
     if (code) {
       const [result] = await conn.query(
-        'UPDATE trip_route SET name = ?, short_code = ?, weekdays = ?, status = ? WHERE code = ?',
-        [r.name, r.short_code, r.weekdays, r.status, code]
+        'UPDATE trip_route SET name = ?, short_code = ?, weekdays = ?, status = ?, updated_by = ? WHERE code = ?',
+        [r.name, r.short_code, r.weekdays, r.status, req.user.user_code, code]
       );
       if (!result.affectedRows) {
         await conn.rollback();
@@ -102,12 +104,12 @@ async function saveRoute(req, res, next, code) {
       }
     } else {
       const [result] = await conn.query(
-        'INSERT INTO trip_route (name, short_code, weekdays, status) VALUES (?, ?, ?, ?)',
-        [r.name, r.short_code, r.weekdays, r.status]
+        'INSERT INTO trip_route (name, short_code, weekdays, status, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?)',
+        [r.name, r.short_code, r.weekdays, r.status, req.user.user_code, req.user.user_code]
       );
       tripCode = result.insertId;
     }
-    await saveBranches(conn, tripCode, b.branches);
+    await saveBranches(conn, tripCode, b.branches, req.user.user_code);
     await conn.commit();
     res.status(code ? 200 : 201).json({ code: tripCode, ...r, branches: b.branches });
   } catch (err) {

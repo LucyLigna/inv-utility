@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS vehiclenumber (
   number      VARCHAR(20)  NOT NULL,
   make        VARCHAR(100) NOT NULL,
   status      ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_by   INT          DEFAULT NULL, -- user_code of the user who created the row
+  updated_by   INT          DEFAULT NULL, -- user_code of the user who last changed the row
   created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_vehicle_number (number)
@@ -36,6 +38,8 @@ CREATE TABLE IF NOT EXISTS driver (
   name        VARCHAR(100) NOT NULL,
   short_code  VARCHAR(10)  NULL,
   status      ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_by   INT          DEFAULT NULL, -- user_code of the user who created the row
+  updated_by   INT          DEFAULT NULL, -- user_code of the user who last changed the row
   created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_driver_name (name),
@@ -49,6 +53,8 @@ CREATE TABLE IF NOT EXISTS trip_route (
   -- Days the route runs, e.g. 'MON,THU'
   weekdays    SET('MON','TUE','WED','THU','FRI','SAT') NOT NULL DEFAULT '',
   status      ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_by   INT          DEFAULT NULL, -- user_code of the user who created the row
+  updated_by   INT          DEFAULT NULL, -- user_code of the user who last changed the row
   created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_trip_route_name (name),
@@ -61,6 +67,8 @@ CREATE TABLE IF NOT EXISTS trip_route_branches (
   company_code VARCHAR(3) NOT NULL,
   ba_code      CHAR(4)    NOT NULL,
   status       ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+  created_by   INT          DEFAULT NULL, -- user_code of the user who created the row
+  updated_by   INT          DEFAULT NULL, -- user_code of the user who last changed the row
   created_at   TIMESTAMP  NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at   TIMESTAMP  NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (trip_code, company_code, ba_code),
@@ -77,6 +85,8 @@ CREATE TABLE IF NOT EXISTS trip_route_customers (
   main_sub     ENUM('Main','Sub') NOT NULL DEFAULT 'Main',
   sort_order   INT        NOT NULL,
   remarks      VARCHAR(255) DEFAULT NULL, -- main customers only
+  created_by   INT          DEFAULT NULL, -- user_code of the user who created the row
+  updated_by   INT          DEFAULT NULL, -- user_code of the user who last changed the row
   created_at   TIMESTAMP  NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (trip_code, company_code, ba_code, cu_code),
   KEY ix_trip_route_customers_order (trip_code, sort_order),
@@ -102,6 +112,8 @@ CREATE TABLE IF NOT EXISTS trip_sheet (
   -- Totals of the bills in trip_sheet_bills, updated when the bill details are saved
   total_bills    INT        NOT NULL DEFAULT 0,
   total_pack_qty INT        NOT NULL DEFAULT 0,
+  created_by   INT          DEFAULT NULL, -- user_code of the user who created the row
+  updated_by   INT          DEFAULT NULL, -- user_code of the user who last changed the row
   inp_dt_tm    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_trip_sheet_no (tsc_no),
   CONSTRAINT fk_trip_sheet_route FOREIGN KEY (trip_code) REFERENCES trip_route (code),
@@ -118,6 +130,8 @@ CREATE TABLE IF NOT EXISTS trip_sheet_bills (
   amount       DECIMAL(12,2) DEFAULT NULL,
   -- Delivery order on this sheet (customers in the order arranged on the screen, their bills together)
   sort_order   INT           DEFAULT NULL,
+  created_by   INT          DEFAULT NULL, -- user_code of the user who created the row
+  updated_by   INT          DEFAULT NULL, -- user_code of the user who last changed the row
   created_at   TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (ts_code, company_code, ba_code, sm_slno),
   KEY ix_trip_sheet_bills_bill (company_code, ba_code, sm_slno),
@@ -134,6 +148,8 @@ CREATE TABLE IF NOT EXISTS sys_users (
   status          ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
   password_set_at DATETIME     DEFAULT NULL,
   last_login_at   DATETIME     DEFAULT NULL,
+  created_by   INT          DEFAULT NULL, -- user_code of the user who created the row
+  updated_by   INT          DEFAULT NULL, -- user_code of the user who last changed the row
   created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_sys_users_username (username)
@@ -143,6 +159,8 @@ CREATE TABLE IF NOT EXISTS sys_users (
 CREATE TABLE IF NOT EXISTS sys_user_rights (
   user_code    INT         NOT NULL,
   program_code VARCHAR(10) NOT NULL,
+  created_by   INT          DEFAULT NULL, -- user_code of the user who created the row
+  updated_by   INT          DEFAULT NULL, -- user_code of the user who last changed the row
   PRIMARY KEY (user_code, program_code),
   CONSTRAINT fk_user_rights_user FOREIGN KEY (user_code) REFERENCES sys_users (user_code),
   CONSTRAINT fk_user_rights_program FOREIGN KEY (program_code) REFERENCES sys_programfile (program_code)
@@ -152,6 +170,22 @@ CREATE TABLE IF NOT EXISTS sys_user_rights (
 CREATE TABLE IF NOT EXISTS sys_settings (
   setting_key   VARCHAR(50)  NOT NULL PRIMARY KEY,
   setting_value VARCHAR(500) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Activity of users: logins, password changes and every change made on a screen
+CREATE TABLE IF NOT EXISTS sys_user_log (
+  log_id       BIGINT        NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  log_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  user_code    INT           DEFAULT NULL,
+  username     VARCHAR(50)   DEFAULT NULL,
+  action       VARCHAR(30)   NOT NULL,      -- Login, Login failed, Create, Update, Delete, Close, ...
+  program_code VARCHAR(10)   DEFAULT NULL,
+  module       VARCHAR(100)  DEFAULT NULL,  -- the screen
+  record_ref   VARCHAR(100)  DEFAULT NULL,  -- which record (e.g. TS-000001, user name, vehicle number)
+  details      VARCHAR(1000) DEFAULT NULL,
+  ip_address   VARCHAR(45)   DEFAULT NULL,
+  KEY ix_sys_user_log_time (log_time),
+  KEY ix_sys_user_log_user (user_code, log_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- First administrator; sets a password at the first login
@@ -169,7 +203,8 @@ INSERT IGNORE INTO sys_programfile (program_code, menu_code, name, route, sort_o
   ('P0201', 'M02', 'Trip Route Wise Customers', '/transaction/trip-route-customers', 1),
   ('P0202', 'M02', 'Trip Sheet', '/transaction/trip-sheet', 2),
   ('P0203', 'M02', 'Trip Sheet - Bill Details', '/transaction/trip-sheet-bills', 3),
-  ('P0301', 'M03', 'Users', '/admin/users', 1);
+  ('P0301', 'M03', 'Users', '/admin/users', 1),
+  ('P0302', 'M03', 'User Log', '/admin/user-log', 2);
 
 -- ---------------------------------------------------------------------------
 -- Data pulled from the INV API (192.168.3.24) by the scheduler in src/sync

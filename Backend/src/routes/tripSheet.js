@@ -41,6 +41,12 @@ function validate(body) {
   return r;
 }
 
+// The sheet's document number, for answers (and so the user log names the sheet)
+async function sheetNo(code) {
+  const [[row]] = await pool.query('SELECT tsc_no FROM trip_sheet WHERE ts_code = ?', [code]);
+  return row ? row.tsc_no : null;
+}
+
 // A route can have only one Active trip sheet at a time. Returns that sheet (other than exceptCode), if any.
 async function activeSheetFor(db, tripCode, exceptCode = 0) {
   const [[sheet]] = await db.query(
@@ -108,9 +114,11 @@ router.post('/', async (req, res, next) => {
     );
     const tscNo = NO_PREFIX + String((last.n || 0) + 1).padStart(NO_DIGITS, '0');
     const [result] = await conn.query(
-      `INSERT INTO trip_sheet (tsc_no, entry_date, trip_code, driver_code, loading_date, start_date, end_date, remarks)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [tscNo, r.entry_date, r.trip_code, r.driver_code, r.loading_date, r.start_date, r.end_date, r.remarks]
+      `INSERT INTO trip_sheet (tsc_no, entry_date, trip_code, driver_code, loading_date, start_date, end_date, remarks,
+         created_by, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [tscNo, r.entry_date, r.trip_code, r.driver_code, r.loading_date, r.start_date, r.end_date, r.remarks,
+        req.user.user_code, req.user.user_code]
     );
     await conn.commit();
     res.status(201).json({ code: result.insertId, tsc_no: tscNo, ...r });
@@ -136,11 +144,11 @@ router.put('/:code', async (req, res, next) => {
     if (linkError) return res.status(400).json({ message: linkError });
     const [result] = await pool.query(
       `UPDATE trip_sheet SET entry_date = ?, driver_code = ?, loading_date = ?, start_date = ?,
-         end_date = ?, remarks = ? WHERE ts_code = ? AND status = 'Active'`,
-      [r.entry_date, r.driver_code, r.loading_date, r.start_date, r.end_date, r.remarks, req.params.code]
+         end_date = ?, remarks = ?, updated_by = ? WHERE ts_code = ? AND status = 'Active'`,
+      [r.entry_date, r.driver_code, r.loading_date, r.start_date, r.end_date, r.remarks, req.user.user_code, req.params.code]
     );
     if (!result.affectedRows) return res.status(404).json({ message: 'Trip sheet not found, or it is closed or cancelled' });
-    res.json({ code: Number(req.params.code), ...r });
+    res.json({ code: Number(req.params.code), tsc_no: await sheetNo(req.params.code), ...r });
   } catch (err) {
     next(err);
   }
@@ -151,11 +159,11 @@ router.put('/:code', async (req, res, next) => {
 router.post('/:code/close', async (req, res, next) => {
   try {
     const [result] = await pool.query(
-      "UPDATE trip_sheet SET status = 'Closed', closed_at = NOW() WHERE ts_code = ? AND status = 'Active'",
-      [req.params.code]
+      "UPDATE trip_sheet SET status = 'Closed', closed_at = NOW(), updated_by = ? WHERE ts_code = ? AND status = 'Active'",
+      [req.user.user_code, req.params.code]
     );
     if (!result.affectedRows) return res.status(404).json({ message: 'Trip sheet not found, or already closed or cancelled' });
-    res.json({ code: Number(req.params.code), status: 'Closed' });
+    res.json({ code: Number(req.params.code), tsc_no: await sheetNo(req.params.code), status: 'Closed' });
   } catch (err) {
     next(err);
   }
@@ -182,10 +190,10 @@ router.post('/:code/reopen', async (req, res, next) => {
       });
     }
     await pool.query(
-      "UPDATE trip_sheet SET status = 'Active', closed_at = NULL WHERE ts_code = ? AND status = 'Closed'",
-      [req.params.code]
+      "UPDATE trip_sheet SET status = 'Active', closed_at = NULL, updated_by = ? WHERE ts_code = ? AND status = 'Closed'",
+      [req.user.user_code, req.params.code]
     );
-    res.json({ code: Number(req.params.code), status: 'Active' });
+    res.json({ code: Number(req.params.code), tsc_no: await sheetNo(req.params.code), status: 'Active' });
   } catch (err) {
     next(err);
   }
@@ -201,11 +209,11 @@ router.delete('/:code', async (req, res, next) => {
       });
     }
     const [result] = await pool.query(
-      "UPDATE trip_sheet SET status = 'Cancelled', cancelled_at = NOW() WHERE ts_code = ? AND status = 'Active'",
-      [req.params.code]
+      "UPDATE trip_sheet SET status = 'Cancelled', cancelled_at = NOW(), updated_by = ? WHERE ts_code = ? AND status = 'Active'",
+      [req.user.user_code, req.params.code]
     );
     if (!result.affectedRows) return res.status(404).json({ message: 'Trip sheet not found or already cancelled' });
-    res.json({ code: Number(req.params.code), status: 'Cancelled' });
+    res.json({ code: Number(req.params.code), tsc_no: await sheetNo(req.params.code), status: 'Cancelled' });
   } catch (err) {
     next(err);
   }

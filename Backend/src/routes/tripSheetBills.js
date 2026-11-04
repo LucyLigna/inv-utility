@@ -180,7 +180,7 @@ router.put('/:tsCode', async (req, res, next) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [[sheet]] = await conn.query('SELECT ts_code, status FROM trip_sheet WHERE ts_code = ? FOR UPDATE', [req.params.tsCode]);
+    const [[sheet]] = await conn.query('SELECT ts_code, tsc_no, status FROM trip_sheet WHERE ts_code = ? FOR UPDATE', [req.params.tsCode]);
     if (!sheet) {
       await conn.rollback();
       return res.status(404).json({ message: 'Trip sheet not found' });
@@ -213,21 +213,33 @@ router.put('/:tsCode', async (req, res, next) => {
         return res.status(409).json({ message: `Already on another trip sheet: ${list}` });
       }
     }
+    // Bills already on the sheet keep who added them (and when); the saver becomes updated_by for all
+    const [before] = await conn.query(
+      'SELECT company_code, ba_code, sm_slno, created_by, created_at FROM trip_sheet_bills WHERE ts_code = ?',
+      [sheet.ts_code]
+    );
+    const added = new Map(before.map((b) => [`${b.company_code}|${b.ba_code}|${b.sm_slno}`, b]));
     await conn.query('DELETE FROM trip_sheet_bills WHERE ts_code = ?', [sheet.ts_code]);
+    const me = req.user.user_code;
     if (bills.length) {
       const position = new Map(keys.map((k, i) => [k.join('|'), i + 1]));
       await conn.query(
-        'INSERT INTO trip_sheet_bills (ts_code, company_code, ba_code, sm_slno, pack_qty, amount, sort_order) VALUES ?',
-        [bills.map((b) => [sheet.ts_code, b.company_code, b.ba_code, b.sm_slno, b.pack_qty, b.net_amount,
-          position.get(`${b.company_code}|${b.ba_code}|${b.sm_slno}`)])]
+        `INSERT INTO trip_sheet_bills
+           (ts_code, company_code, ba_code, sm_slno, pack_qty, amount, sort_order, created_by, created_at, updated_by) VALUES ?`,
+        [bills.map((b) => {
+          const k = `${b.company_code}|${b.ba_code}|${b.sm_slno}`;
+          const old = added.get(k);
+          return [sheet.ts_code, b.company_code, b.ba_code, b.sm_slno, b.pack_qty, b.net_amount, position.get(k),
+            old ? old.created_by : me, old ? old.created_at : new Date(), me];
+        })]
       );
     }
     const totalPack = bills.reduce((sum, b) => sum + (Number(b.pack_qty) || 0), 0);
-    await conn.query('UPDATE trip_sheet SET total_bills = ?, total_pack_qty = ? WHERE ts_code = ?', [
-      bills.length, totalPack, sheet.ts_code,
+    await conn.query('UPDATE trip_sheet SET total_bills = ?, total_pack_qty = ?, updated_by = ? WHERE ts_code = ?', [
+      bills.length, totalPack, me, sheet.ts_code,
     ]);
     await conn.commit();
-    res.json({ total_bills: bills.length, total_pack_qty: totalPack });
+    res.json({ tsc_no: sheet.tsc_no, total_bills: bills.length, total_pack_qty: totalPack });
   } catch (err) {
     await conn.rollback();
     next(err);
