@@ -4,13 +4,14 @@ import {
   TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import {
-  AddCircleOutline, AddLocationAlt, CheckCircle, LockOpenOutlined, TaskAlt, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, LocationOff, LocationOn, PlayArrow, PlaylistAdd, Refresh,
+  AddCircleOutline, AddLocationAlt, CheckCircle, NoteAdd, LockOpenOutlined, TaskAlt, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, LocationOff, LocationOn, PlayArrow, PlaylistAdd, Refresh,
   Save, Sort, SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
 import { useConfirm } from '../../components/ConfirmDialog';
 import TripSheetPrint, { exportSummaryExcel } from './TripSheetPrint';
 import MapToRouteDialog from './MapToRouteDialog';
+import ManualBillDialog from './ManualBillDialog';
 import { arrange, billKey, byCustomer, savedOrder } from './sheetGroups';
 import { useAuth } from '../../auth';
 import api, { errorMessage } from '../../api';
@@ -56,6 +57,7 @@ export default function TripSheetBills() {
   const [deliveries, setDeliveries] = useState({}); // customers the driver has scanned as delivered
   const [confirm, confirmDialog] = useConfirm();
   const [mapping, setMapping] = useState(null); // customer being mapped to the route
+  const [manualOpen, setManualOpen] = useState(false); // Add manual bill pop-up
   const { user } = useAuth();
   // Mapping changes Trip Route Wise Customers, so it needs the right to that screen
   const canMap = user.isAdmin || user.programs.includes('P0201');
@@ -178,6 +180,31 @@ export default function TripSheetBills() {
     bills.forEach((b) => next.delete(billKey(b)));
     return next;
   });
+
+  // A manual bill was entered: it goes on the sheet like a picked bill (Save keeps it)
+  const manualAdded = (bill) => {
+    setManualOpen(false);
+    addBills([bill]);
+    setNotice(`Manual bill ${bill.smc_no} added to the sheet. Press Save to keep it.`);
+  };
+
+  // A manual bill that is not on any trip sheet can be deleted from the Bills list
+  const deleteManual = async (b) => {
+    const ok = await confirm({
+      title: `Delete manual bill ${b.smc_no}?`,
+      message: `${b.cuc_desc}, ${b.pack_qty} cases. It is removed for good.`,
+      cancelLabel: 'Keep it',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/trip-sheet-bills/manual-bills/${b.company_code}/${b.ba_code}/${b.sm_slno}`);
+      setNotice(`Manual bill ${b.smc_no} deleted`);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
 
   const save = async () => {
     try {
@@ -509,9 +536,10 @@ export default function TripSheetBills() {
                                 <Box component="span" sx={{ color: '#666', fontSize: 13 }}>{showDate(b.bill_date)}</Box>
                                 {b.cuc_desc !== g.name && <Box component="span" sx={{ fontSize: 13 }}>· {b.cuc_desc}</Box>}
                                 <Box component="span" sx={{ color: '#666', fontSize: 13 }}>({b.company_branch})</Box>
+                                {b.is_manual ? <Chip size="small" label="Manual" sx={{ height: 18, fontSize: 11 }} /> : null}
                               </Box>
                             </TableCell>
-                            <TableCell sx={{ ...num, color: '#444' }}>₹ {money(b.net_amount)}</TableCell>
+                            <TableCell sx={{ ...num, color: '#444' }}>{b.net_amount == null ? '—' : `₹ ${money(b.net_amount)}`}</TableCell>
                             <TableCell sx={num}>{b.pack_qty}</TableCell>
                             <TableCell sx={num}>1</TableCell>
                             <TableCell sx={{ ...cell, py: 0 }} align="center">
@@ -562,6 +590,9 @@ export default function TripSheetBills() {
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap', mb: 1.5 }}>
                 <Typography sx={{ fontWeight: 700, mr: 'auto' }}>Bills</Typography>
+                <Button size="small" variant="outlined" startIcon={<NoteAdd />} onClick={() => setManualOpen(true)}>
+                  Manual Bill
+                </Button>
                 <TextField
                   type="date" size="small" label="Bill date from" value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={dateSx}
@@ -609,7 +640,19 @@ export default function TripSheetBills() {
                         <TableCell sx={{ ...cell, py: 0 }} align="center">
                           <AddCircleOutline fontSize="small" sx={{ color: '#1a35b0', verticalAlign: 'middle' }} />
                         </TableCell>
-                        <TableCell sx={{ ...cell, whiteSpace: 'nowrap' }}>{b.smc_no}</TableCell>
+                        <TableCell sx={{ ...cell, whiteSpace: 'nowrap' }}>
+                          {b.smc_no}
+                          {b.is_manual ? (
+                            <>
+                              <Chip size="small" label="Manual" sx={{ ml: 0.5, height: 18, fontSize: 11 }} />
+                              <Tooltip title="Delete this manual bill">
+                                <IconButton size="small" sx={{ p: 0.25 }} onClick={(e) => { e.stopPropagation(); deleteManual(b); }}>
+                                  <DeleteOutline fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </>
+                          ) : null}
+                        </TableCell>
                         <TableCell sx={cell}>
                           {b.cuc_desc}
                           {b.route_order == null && <Chip size="small" label="Not on route" sx={{ ml: 1, height: 20 }} />}
@@ -623,7 +666,7 @@ export default function TripSheetBills() {
                           )}
                         </TableCell>
                         <TableCell sx={{ ...cell, whiteSpace: 'nowrap' }}>{b.company_branch}</TableCell>
-                        <TableCell sx={num}>{money(b.net_amount)}</TableCell>
+                        <TableCell sx={num}>{b.net_amount == null ? '—' : money(b.net_amount)}</TableCell>
                         <TableCell sx={num}>{b.pack_qty}</TableCell>
                         <TableCell sx={cell}>{b.tpc_desc}</TableCell>
                         <TableCell sx={cell}>{b.transporter_type}</TableCell>
@@ -645,6 +688,7 @@ export default function TripSheetBills() {
         )}
       </Box>
       {confirmDialog}
+      <ManualBillDialog sheet={sheet} open={manualOpen && Boolean(sheet)} onClose={() => setManualOpen(false)} onAdded={manualAdded} />
       {sheet && (
         <MapToRouteDialog customer={mapping} tripCode={sheet.trip_code} onClose={() => setMapping(null)} onMapped={afterMapped} />
       )}

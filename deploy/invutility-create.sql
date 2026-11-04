@@ -126,6 +126,10 @@ CREATE TABLE IF NOT EXISTS `salesdetails` (
   `checked_ok` varchar(1) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `printed` varchar(3) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `inp_dt_tm` datetime DEFAULT NULL,
+  `is_manual` tinyint(1) NOT NULL DEFAULT '0',
+  `cu_company_code` varchar(3) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `cu_ba_code` varchar(4) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `manual_by` int DEFAULT NULL,
   PRIMARY KEY (`company_code`,`ba_code`,`sm_slno`),
   KEY `idx_salesdetails_cu` (`company_code`,`ba_code`,`cu_code`),
   KEY `idx_salesdetails_smd_date` (`smd_date`)

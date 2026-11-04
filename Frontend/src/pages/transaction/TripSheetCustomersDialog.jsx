@@ -152,7 +152,7 @@ export default function TripSheetCustomersDialog({ sheet, onClose }) {
                                   {b.cuc_desc !== g.name && <Box component="span" sx={{ fontSize: 13 }}>· {b.cuc_desc}</Box>}
                                   <Box component="span" sx={{ color: '#666', fontSize: 13 }}>({b.company_branch})</Box>
                                   {b.eway_billno && <Box component="span" sx={{ color: '#666', fontSize: 13 }}>E-way {b.eway_billno}</Box>}
-                                  <Box component="span" sx={{ ml: 'auto', color: '#444' }}>₹ {money(b.net_amount)}</Box>
+                                  <Box component="span" sx={{ ml: 'auto', color: '#444' }}>{b.net_amount == null ? '—' : `₹ ${money(b.net_amount)}`}</Box>
                                 </Box>
                               </TableCell>
                               <TableCell sx={num}>{b.pack_qty}</TableCell>

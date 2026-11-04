@@ -152,7 +152,7 @@ function CustomerBills({ groups, allBills, contacts, qr }) {
                     <td style={td}>{b.smc_no}</td>
                     <td style={td}>{b.company_branch}</td>
                     <td style={td}>{b.eway_billno || ''}</td>
-                    <td style={numTd}>{money(b.net_amount)}</td>
+                    <td style={numTd}>{b.net_amount == null ? '—' : money(b.net_amount)}</td>
                     <td style={numTd}>{b.pack_qty}</td>
                   </tr>
                 ))}

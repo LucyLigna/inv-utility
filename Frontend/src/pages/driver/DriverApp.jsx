@@ -195,7 +195,7 @@ function Trip({ onLogout }) {
                     <Box key={`${b.company_branch}|${b.smc_no}`} sx={{ py: 0.75, borderTop: '1px dashed #dfe3ea', fontSize: 14 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
                         <span><b>{b.smc_no}</b> · {showDate(b.bill_date)}</span>
-                        <b>₹ {money(b.net_amount)}</b>
+                        <b>{b.net_amount == null ? '—' : `₹ ${money(b.net_amount)}`}</b>
                       </Box>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, color: '#555', fontSize: 13 }}>
                         <span>{b.company_branch}{b.eway_billno ? ` · E-way ${b.eway_billno}` : ''}</span>

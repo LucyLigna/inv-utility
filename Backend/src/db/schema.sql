@@ -362,6 +362,12 @@ CREATE TABLE IF NOT EXISTS salesdetails (
   checked_ok       VARCHAR(1)    DEFAULT NULL,
   printed          VARCHAR(3)    DEFAULT NULL,
   inp_dt_tm        DATETIME      DEFAULT NULL,
+  -- Manual bills (added in Trip Sheet - Bill Details, sm_slno 'M000000001'...; the INV API never sends these numbers,
+  -- so the sync leaves them alone). Don't truncate this table: manual bills exist only here.
+  is_manual        TINYINT(1)    NOT NULL DEFAULT 0,
+  cu_company_code  VARCHAR(3)    DEFAULT NULL, -- manual bill: the customer's company and branch, when the bill is
+  cu_ba_code       VARCHAR(4)    DEFAULT NULL, -- for another company - branch than the customer's
+  manual_by        INT           DEFAULT NULL, -- user_code who entered the manual bill
   PRIMARY KEY (company_code, ba_code, sm_slno),
   KEY idx_salesdetails_cu (company_code, ba_code, cu_code),
   KEY idx_salesdetails_smd_date (smd_date)

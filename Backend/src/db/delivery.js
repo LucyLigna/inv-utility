@@ -60,7 +60,7 @@ async function sheetStops(sheet) {
     const s = stops.get(b.group_key);
     s.bills.push({
       smc_no: b.smc_no, bill_date: b.bill_date, company_branch: b.company_branch, eway_billno: b.eway_billno,
-      net_amount: Number(b.net_amount) || 0, pack_qty: Number(b.pack_qty) || 0,
+      net_amount: b.net_amount == null ? null : Number(b.net_amount), pack_qty: Number(b.pack_qty) || 0,
       // a sub customer's bill under its main customer: whose bill it is
       cuc_desc: b.cuc_desc !== b.group_name ? b.cuc_desc : null,
     });

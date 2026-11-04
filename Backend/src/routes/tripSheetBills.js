@@ -80,11 +80,12 @@ router.get('/:tsCode/available', async (req, res, next) => {
       where.push(`(s.company_code, s.ba_code) IN (SELECT company_code, ba_code FROM trip_route_branches
         WHERE trip_code = ? AND status = 'Active')`);
     } else {
-      where.push(`EXISTS (SELECT 1 FROM trip_route_customers t WHERE t.trip_code = ? AND t.company_code = s.company_code
-        AND t.ba_code = s.ba_code AND t.cu_code = s.cu_code)`);
+      where.push(`EXISTS (SELECT 1 FROM trip_route_customers t WHERE t.trip_code = ? AND t.company_code = COALESCE(s.cu_company_code, s.company_code)
+        AND t.ba_code = COALESCE(s.cu_ba_code, s.ba_code) AND t.cu_code = s.cu_code)`);
     }
     params.push(sheet.trip_code);
-    if (ownOnly) where.push("s.transporter_type = 'Own'");
+    // Manual bills count as own transport
+    if (ownOnly) where.push("(s.transporter_type = 'Own' OR s.is_manual = 1)");
     if (from) {
       where.push('s.smd_date >= ?');
       params.push(from);
@@ -191,6 +192,126 @@ router.put('/:tsCode', async (req, res, next) => {
     next(err);
   } finally {
     conn.release();
+  }
+});
+
+// --- Manual bills ---------------------------------------------------------------------------
+// A bill that is not in INV (yet), entered by hand for a main customer of the sheet's route. It is stored in
+// salesdetails (is_manual = 1, sm_slno 'M000000001'...) so it works like any other bill: on the sheet, in the
+// prints, the QR and the driver page. The screen adds it to the sheet; Save keeps it there.
+// { customer: { company_code, ba_code, cu_code }, company_code, ba_code, smc_no, bill_date, net_amount?, pack_qty }
+const MANUAL_PREFIX = 'M';
+
+// Choices for a manual bill: the route's main customers (in route order) and its active branches.
+// Read from the customer table itself, so every main customer is listed even if view_customer_list misses it.
+router.get('/:tsCode/manual-options', async (req, res, next) => {
+  try {
+    const sheet = await findSheet(req.params.tsCode);
+    if (!sheet) return res.status(404).json({ message: 'Trip sheet not found' });
+    const [customers] = await pool.query(
+      `SELECT t.company_code, t.ba_code, t.cu_code, COALESCE(c.cuc_desc, CONCAT('Customer ', t.cu_code)) AS cuc_desc, c.cuc_place,
+         COALESCE(b.company_branch_code, b.company_branch, CONCAT(t.company_code, ' - ', t.ba_code)) AS company_branch
+       FROM trip_route_customers t
+       LEFT JOIN customer c ON c.company_code = t.company_code AND c.ba_code = t.ba_code AND c.cu_code = t.cu_code
+       LEFT JOIN view_branch_list b ON b.company_code = t.company_code AND b.ba_code = t.ba_code
+       WHERE t.trip_code = ? AND t.main_sub = 'Main' ORDER BY t.sort_order`,
+      [sheet.trip_code]
+    );
+    const [branches] = await pool.query(
+      `SELECT r.company_code, r.ba_code, COALESCE(b.company_branch_code, b.company_branch, CONCAT(r.company_code, ' - ', r.ba_code)) AS company_branch
+       FROM trip_route_branches r LEFT JOIN view_branch_list b ON b.company_code = r.company_code AND b.ba_code = r.ba_code
+       WHERE r.trip_code = ? AND r.status = 'Active' ORDER BY company_branch`,
+      [sheet.trip_code]
+    );
+    res.json({ customers, branches });
+  } catch (err) {
+    next(err);
+  }
+});
+router.post('/:tsCode/manual-bills', async (req, res, next) => {
+  const b = req.body || {};
+  const cust = b.customer || {};
+  const smcNo = String(b.smc_no || '').trim().toUpperCase();
+  const billDate = String(b.bill_date || '').slice(0, 10);
+  const amountGiven = b.net_amount !== undefined && b.net_amount !== null && String(b.net_amount).trim() !== '';
+  const amount = amountGiven ? Number(b.net_amount) : null;
+  const packs = Number(b.pack_qty);
+  if (!cust.company_code || !cust.ba_code || !cust.cu_code) return res.status(400).json({ message: 'Select the customer' });
+  if (!b.company_code || !b.ba_code) return res.status(400).json({ message: 'Select the company - branch' });
+  if (!smcNo) return res.status(400).json({ message: 'Bill # is required' });
+  if (smcNo.length > 20) return res.status(400).json({ message: 'Bill # can be at most 20 characters' });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(billDate)) return res.status(400).json({ message: 'Date is required' });
+  if (amountGiven && (!Number.isFinite(amount) || amount < 0 || amount > 9999999999)) {
+    return res.status(400).json({ message: 'Amount must be a number of 0 or more' });
+  }
+  if (!Number.isInteger(packs) || packs < 1 || packs > 99999) return res.status(400).json({ message: 'Number of cases must be a whole number of 1 or more' });
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[sheet]] = await conn.query('SELECT ts_code, tsc_no, trip_code, status, bills_completed_at FROM trip_sheet WHERE ts_code = ? FOR UPDATE', [req.params.tsCode]);
+    const fail = async (status, message) => { await conn.rollback(); return res.status(status).json({ message }); };
+    if (!sheet) return fail(404, 'Trip sheet not found');
+    if (sheet.status !== 'Active') return fail(400, `This trip sheet is ${sheet.status.toLowerCase()}`);
+    if (sheet.bills_completed_at) return fail(400, `The bills of ${sheet.tsc_no} are marked complete; no bill can be added`);
+    const [[main]] = await conn.query(
+      "SELECT 1 AS ok FROM trip_route_customers WHERE trip_code = ? AND company_code = ? AND ba_code = ? AND cu_code = ? AND main_sub = 'Main'",
+      [sheet.trip_code, cust.company_code, cust.ba_code, cust.cu_code]
+    );
+    if (!main) return fail(400, 'The customer must be a main customer of this route in Trip Route Wise Customers');
+    const [[branch]] = await conn.query(
+      "SELECT 1 AS ok FROM trip_route_branches WHERE trip_code = ? AND company_code = ? AND ba_code = ? AND status = 'Active'",
+      [sheet.trip_code, b.company_code, b.ba_code]
+    );
+    if (!branch) return fail(400, "The company - branch must be one of the route's branches");
+    const [[dup]] = await conn.query('SELECT is_manual FROM salesdetails WHERE company_code = ? AND ba_code = ? AND smc_no = ? LIMIT 1', [b.company_code, b.ba_code, smcNo]);
+    if (dup) return fail(409, `Bill # ${smcNo} already exists for this company - branch${dup.is_manual ? ' (a manual bill)' : ''}`);
+    // Next manual number; the lock keeps two saves at once from taking the same one
+    const [[last]] = await conn.query(
+      `SELECT MAX(CAST(SUBSTRING(sm_slno, 2) AS UNSIGNED)) n FROM salesdetails WHERE is_manual = 1 AND sm_slno LIKE '${MANUAL_PREFIX}%' FOR UPDATE`
+    );
+    const slno = MANUAL_PREFIX + String((last.n || 0) + 1).padStart(9, '0');
+    const sameBranch = cust.company_code === b.company_code && cust.ba_code === b.ba_code;
+    await conn.query(
+      `INSERT INTO salesdetails (company_code, ba_code, sm_slno, cu_code, smc_no, smd_date, tpc_desc, transporter_type, net_amount, pack_qty,
+         inp_dt_tm, is_manual, cu_company_code, cu_ba_code, manual_by)
+       VALUES (?, ?, ?, ?, ?, ?, 'MANUAL BILL', 'Manual', ?, ?, NOW(), 1, ?, ?, ?)`,
+      [b.company_code, b.ba_code, slno, cust.cu_code, smcNo, billDate, amount, packs,
+        sameBranch ? null : cust.company_code, sameBranch ? null : cust.ba_code, req.user.user_code]
+    );
+    await conn.commit();
+    const [[bill]] = await pool.query(
+      `SELECT ${BILL_FIELDS} FROM salesdetails s ${BILL_JOINS} WHERE s.company_code = ? AND s.ba_code = ? AND s.sm_slno = ?`,
+      [sheet.trip_code, sheet.trip_code, b.company_code, b.ba_code, slno]
+    );
+    res.status(201).json({ tsc_no: sheet.tsc_no, smc_no: smcNo, bill });
+  } catch (err) {
+    await conn.rollback();
+    next(err);
+  } finally {
+    conn.release();
+  }
+});
+
+// Delete a manual bill that is not on any trip sheet (a Cancelled sheet doesn't count)
+router.delete('/manual-bills/:companyCode/:baCode/:slno', async (req, res, next) => {
+  const { companyCode, baCode, slno } = req.params;
+  try {
+    const [[bill]] = await pool.query(
+      'SELECT smc_no, is_manual FROM salesdetails WHERE company_code = ? AND ba_code = ? AND sm_slno = ?', [companyCode, baCode, slno]
+    );
+    if (!bill) return res.status(404).json({ message: 'Bill not found' });
+    if (!bill.is_manual) return res.status(400).json({ message: 'Only a manual bill can be deleted' });
+    const [[used]] = await pool.query(
+      `SELECT ts.tsc_no FROM trip_sheet_bills tb JOIN trip_sheet ts ON ts.ts_code = tb.ts_code AND ts.status <> 'Cancelled'
+       WHERE tb.company_code = ? AND tb.ba_code = ? AND tb.sm_slno = ? LIMIT 1`,
+      [companyCode, baCode, slno]
+    );
+    if (used) return res.status(400).json({ message: `Manual bill ${bill.smc_no} is on trip sheet ${used.tsc_no}; remove it there first` });
+    await pool.query('DELETE FROM trip_sheet_bills WHERE company_code = ? AND ba_code = ? AND sm_slno = ?', [companyCode, baCode, slno]);
+    await pool.query('DELETE FROM salesdetails WHERE company_code = ? AND ba_code = ? AND sm_slno = ? AND is_manual = 1', [companyCode, baCode, slno]);
+    res.json({ smc_no: bill.smc_no, deleted: true });
+  } catch (err) {
+    next(err);
   }
 });
 
