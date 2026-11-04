@@ -3,10 +3,11 @@ const pool = require('../config/db');
 
 const router = express.Router();
 
-// Customer name: most bills from the INV API come without cuc_desc, so fall back to the customer table, then the code
-// Bill date: smd_date from the INV API; bills loaded before it was synced fall back to the entry date
+// Bill date shown: smd_date from the INV API; bills synced before smd_date existed fall back to the entry date.
+// The date filter uses smd_date only.
 const BILL_DATE = 'COALESCE(s.smd_date, DATE(s.inp_dt_tm))';
 
+// Customer name: most bills from the INV API come without cuc_desc, so fall back to the customer table, then the code
 const CUSTOMER_NAME = "COALESCE(NULLIF(s.cuc_desc, ''), c.cuc_desc, CONCAT('Customer ', s.cu_code))";
 
 // Bill fields the screen shows, from salesdetails (s) with the customer's place and the branch name.
@@ -147,11 +148,11 @@ router.get('/:tsCode/available', async (req, res, next) => {
     params.push(sheet.trip_code);
     if (ownOnly) where.push("s.transporter_type = 'Own'");
     if (from) {
-      where.push(`${BILL_DATE} >= ?`);
+      where.push('s.smd_date >= ?');
       params.push(from);
     }
     if (to) {
-      where.push(`${BILL_DATE} <= ?`);
+      where.push('s.smd_date <= ?');
       params.push(to);
     }
     if (search) {
