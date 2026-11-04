@@ -23,7 +23,6 @@ const dateSx = { width: 160, '& input': { py: 1 } };
 const billKey = (b) => `${b.company_code}|${b.ba_code}|${b.sm_slno}`;
 const money = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const showDate = (d) => (d ? d.split('-').reverse().join('-') : '');
-const showDateTime = (d) => (d ? `${showDate(d.slice(0, 10))} ${d.slice(11)}` : '');
 const sheetLabel = (s) => `${s.tsc_no} · ${s.route_name} · ${showDate(s.loading_date)} (${(s.loading_day || '').slice(0, 3)})`;
 // Selected bills grouped under their main customer (a sub customer's bills go under its main customer on the
 // route), in the route's visiting order; customers not on the route come last
@@ -455,7 +454,7 @@ export default function TripSheetBills() {
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                 <SubdirectoryArrowRight fontSize="small" sx={{ color: '#9aa0ab' }} />
                                 <b>{b.smc_no}</b>
-                                <Box component="span" sx={{ color: '#666', fontSize: 13 }}>{showDateTime(b.bill_date)}</Box>
+                                <Box component="span" sx={{ color: '#666', fontSize: 13 }}>{showDate(b.bill_date)}</Box>
                                 {b.cuc_desc !== g.name && <Box component="span" sx={{ fontSize: 13 }}>· {b.cuc_desc}</Box>}
                                 <Box component="span" sx={{ color: '#666', fontSize: 13 }}>({b.company_branch})</Box>
                               </Box>

@@ -326,6 +326,7 @@ CREATE TABLE IF NOT EXISTS salesdetails (
   cuc_desc         VARCHAR(100)  DEFAULT NULL,
   roc_desc         VARCHAR(40)   DEFAULT NULL,
   smc_no           VARCHAR(20)   DEFAULT NULL,
+  smd_date         DATE          DEFAULT NULL, -- bill date
   tp_code          VARCHAR(4)    DEFAULT NULL,
   tpc_desc         VARCHAR(40)   DEFAULT NULL,
   transporter_type VARCHAR(20)   DEFAULT NULL,
@@ -336,7 +337,8 @@ CREATE TABLE IF NOT EXISTS salesdetails (
   printed          VARCHAR(3)    DEFAULT NULL,
   inp_dt_tm        DATETIME      DEFAULT NULL,
   PRIMARY KEY (company_code, ba_code, sm_slno),
-  KEY idx_salesdetails_cu (company_code, ba_code, cu_code)
+  KEY idx_salesdetails_cu (company_code, ba_code, cu_code),
+  KEY idx_salesdetails_smd_date (smd_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Branch picker list: 'BAD - CAL UNIT I' (company short code - branch name)

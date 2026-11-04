@@ -62,7 +62,7 @@ module.exports = {
     loopUntilEmpty: true,
     keys: ['company_code', 'ba_code', 'sm_slno'],
     columns: [
-      'company_code', 'ba_code', 'sm_slno', 'cu_code', 'cuc_desc', 'roc_desc', 'smc_no', 'tp_code', 'tpc_desc', 'transporter_type',
+      'company_code', 'ba_code', 'sm_slno', 'cu_code', 'cuc_desc', 'roc_desc', 'smc_no', 'smd_date', 'tp_code', 'tpc_desc', 'transporter_type',
       'net_amount', 'pack_qty', 'eway_billno', 'checked_ok', 'printed', 'inp_dt_tm',
     ],
   },

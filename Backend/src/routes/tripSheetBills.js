@@ -4,6 +4,9 @@ const pool = require('../config/db');
 const router = express.Router();
 
 // Customer name: most bills from the INV API come without cuc_desc, so fall back to the customer table, then the code
+// Bill date: smd_date from the INV API; bills loaded before it was synced fall back to the entry date
+const BILL_DATE = 'COALESCE(s.smd_date, DATE(s.inp_dt_tm))';
+
 const CUSTOMER_NAME = "COALESCE(NULLIF(s.cuc_desc, ''), c.cuc_desc, CONCAT('Customer ', s.cu_code))";
 
 // Bill fields the screen shows, from salesdetails (s) with the customer's place and the branch name.
@@ -11,7 +14,7 @@ const CUSTOMER_NAME = "COALESCE(NULLIF(s.cuc_desc, ''), c.cuc_desc, CONCAT('Cust
 // group_*: the main customer the bill belongs under: for a sub customer on the route, its main customer
 // (the nearest 'Main' row above it in Trip Route Wise Customers); otherwise the customer itself.
 const BILL_FIELDS = `s.company_code, s.ba_code, s.sm_slno, s.smc_no, s.cu_code, ${CUSTOMER_NAME} AS cuc_desc, s.net_amount, s.pack_qty,
-  s.tpc_desc, s.transporter_type, DATE_FORMAT(s.inp_dt_tm, '%Y-%m-%d %H:%i') AS bill_date, c.cuc_place,
+  s.tpc_desc, s.transporter_type, DATE_FORMAT(${BILL_DATE}, '%Y-%m-%d') AS bill_date, c.cuc_place,
   COALESCE(b.company_branch_code, b.company_branch, CONCAT(s.company_code, ' - ', COALESCE(b.brc_desc, s.ba_code))) AS company_branch,
   rc.route_order, rc.main_sub, rc.group_order,
   CONCAT_WS('|', COALESCE(gm.company_code, s.company_code), COALESCE(gm.ba_code, s.ba_code), COALESCE(gm.cu_code, s.cu_code)) AS group_key,
@@ -144,11 +147,11 @@ router.get('/:tsCode/available', async (req, res, next) => {
     params.push(sheet.trip_code);
     if (ownOnly) where.push("s.transporter_type = 'Own'");
     if (from) {
-      where.push('s.inp_dt_tm >= ?');
+      where.push(`${BILL_DATE} >= ?`);
       params.push(from);
     }
     if (to) {
-      where.push('s.inp_dt_tm < ? + INTERVAL 1 DAY');
+      where.push(`${BILL_DATE} <= ?`);
       params.push(to);
     }
     if (search) {

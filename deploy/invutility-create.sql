@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS `salesdetails` (
   `cuc_desc` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `roc_desc` varchar(40) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `smc_no` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `smd_date` date DEFAULT NULL,
   `tp_code` varchar(4) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `tpc_desc` varchar(40) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `transporter_type` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -124,7 +125,8 @@ CREATE TABLE IF NOT EXISTS `salesdetails` (
   `printed` varchar(3) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `inp_dt_tm` datetime DEFAULT NULL,
   PRIMARY KEY (`company_code`,`ba_code`,`sm_slno`),
-  KEY `idx_salesdetails_cu` (`company_code`,`ba_code`,`cu_code`)
+  KEY `idx_salesdetails_cu` (`company_code`,`ba_code`,`cu_code`),
+  KEY `idx_salesdetails_smd_date` (`smd_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- salesexecutive
