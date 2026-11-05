@@ -221,14 +221,14 @@ function Trip({ onLogout }) {
                   )}
                   {s.delivered ? (
                     <Typography variant="body2" sx={{ mt: 1, color: '#2e7d32', fontWeight: 600 }}>
-                      Delivered at {time(s.delivered.delivered_at)}{s.delivered.method === 'Manual' ? ' (marked without scan)' : ' (QR scanned)'}
+                      Delivered at {time(s.delivered.delivered_at)}{s.delivered.method === 'Manual' ? ' (marked)' : ' (QR scanned)'}
                     </Typography>
                   ) : (
                     <Button
                       variant="outlined" color="success" fullWidth startIcon={<TaskAlt />} disabled={busy}
                       onClick={() => setConfirmStop(s)} sx={{ mt: 1.25 }}
                     >
-                      Mark delivered without scan
+                      Mark delivered
                     </Button>
                   )}
                 </Box>
@@ -257,7 +257,7 @@ function Trip({ onLogout }) {
               <Typography variant="h6" fontWeight={700} mb={1}>Mark delivered?</Typography>
               <Typography>
                 <b>{confirmStop.name}</b> ({confirmStop.bills.length} bill{confirmStop.bills.length > 1 ? 's' : ''}, {confirmStop.cases} cases)
-                will be marked delivered now, without scanning its QR code.
+                will be marked delivered now.
               </Typography>
             </DialogContent>
             <DialogActions>
