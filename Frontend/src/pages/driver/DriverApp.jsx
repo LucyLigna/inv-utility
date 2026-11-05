@@ -8,6 +8,7 @@ import {
   CheckCircle, ErrorOutline, KeyboardArrowDown, KeyboardArrowUp, Logout, Phone, QrCodeScanner, Refresh, TaskAlt,
 } from '@mui/icons-material';
 import QrScanner from './QrScanner';
+import { SAFE_BOTTOM, SAFE_TOP } from './safeArea';
 
 // Driver delivery page, opened on the phone at /driver. The driver logs in with the mobile number from Driver
 // Master and the trip sheet's 4-digit driver code, sees the trip's customers in delivery order, and marks each
@@ -80,7 +81,12 @@ function Login({ onLogin }) {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#eef1f6', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2 }}>
+    <Box
+      sx={{
+        minHeight: '100vh', bgcolor: '#eef1f6', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2,
+        pt: `calc(16px + ${SAFE_TOP})`, pb: `calc(16px + ${SAFE_BOTTOM})`,
+      }}
+    >
       <Paper component="form" onSubmit={submit} sx={{ p: 3, width: '100%', maxWidth: 380 }}>
         <Box sx={{ textAlign: 'center', mb: 2 }}>
           <QrCodeScanner sx={{ fontSize: 44, color: 'primary.main' }} />
@@ -183,8 +189,9 @@ function Trip({ onLogout }) {
   const { sheet, stops } = trip;
   const done = stops.filter((s) => s.delivered).length;
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#eef1f6', pb: 12 }}>
-      <AppBar position="sticky" elevation={1}>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#eef1f6', pb: `calc(96px + ${SAFE_BOTTOM})` }}>
+      {/* The blue bar also fills the space behind the phone's status bar */}
+      <AppBar position="sticky" elevation={1} sx={{ pt: SAFE_TOP }}>
         <Toolbar sx={{ gap: 1 }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography fontWeight={700} noWrap>{sheet.tsc_no} · {sheet.route_name}</Typography>
@@ -274,7 +281,12 @@ function Trip({ onLogout }) {
         {!stops.length && <Alert severity="info">There are no bills on this trip sheet yet.</Alert>}
       </Box>
 
-      <Box sx={{ position: 'fixed', left: 0, right: 0, bottom: 0, p: 1.5, bgcolor: 'rgba(238,241,246,0.95)', borderTop: '1px solid #d5d8e0' }}>
+      <Box
+        sx={{
+          position: 'fixed', left: 0, right: 0, bottom: 0, p: 1.5, pb: `calc(12px + ${SAFE_BOTTOM})`,
+          bgcolor: 'rgba(238,241,246,0.95)', borderTop: '1px solid #d5d8e0',
+        }}
+      >
         <Button
           variant="contained" size="large" fullWidth startIcon={busy ? <CircularProgress size={22} color="inherit" /> : <QrCodeScanner />}
           onClick={() => setScanning(true)} disabled={busy || !stops.length} sx={{ py: 1.5, fontSize: 17, maxWidth: 560, mx: 'auto', display: 'flex' }}

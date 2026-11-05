@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { SAFE_BOTTOM, SAFE_TOP } from './safeArea';
 import {
   Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Typography,
 } from '@mui/material';
@@ -73,7 +74,7 @@ export default function QrScanner({ open, onClose, onResult }) {
   }, [open]);
 
   return (
-    <Dialog open={open} onClose={onClose} fullScreen>
+    <Dialog open={open} onClose={onClose} fullScreen PaperProps={{ sx: { pt: SAFE_TOP, pb: SAFE_BOTTOM } }}>
       <DialogTitle sx={{ pb: 1 }}>Scan the customer's QR code</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {cameraError ? <Alert severity="warning">{cameraError}</Alert> : (
