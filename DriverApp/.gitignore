@@ -6,3 +6,6 @@ www
 *.jks
 *.keystore
 keystore.properties
+
+# Android Studio settings
+android/.idea/

@@ -197,7 +197,7 @@ function Trip({ onLogout }) {
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography fontWeight={700} noWrap>{sheet.tsc_no} · {sheet.route_name}</Typography>
             <Typography variant="caption" sx={{ opacity: 0.85 }} noWrap>
-              {sheet.driver_name} · Loading {showDate(sheet.loading_date)} · Code till {sheet.code_till}
+              {sheet.driver_name} · Loading {showDate(sheet.loading_date)}
             </Typography>
           </Box>
           <IconButton color="inherit" onClick={load} aria-label="refresh"><Refresh /></IconButton>
