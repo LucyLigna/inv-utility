@@ -65,7 +65,7 @@ async function main() {
   const views = objects.filter((o) => o.type === 'VIEW').map((o) => o.name);
 
   const out = [
-    `-- Creates the ${db} database for INV Utility on a new MySQL 8 server.`,
+    `-- Creates the ${db} database for Inventory Utility on a new MySQL 8 server.`,
     `-- Generated from the live database on ${new Date().toISOString().slice(0, 10)} by: npm run db:script`,
     '-- Run it as a user that may create databases, e.g.:  mysql -u root -p < invutility-create.sql',
     '-- Safe to run again: existing tables and rows are left as they are.',

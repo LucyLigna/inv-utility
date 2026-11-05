@@ -1,4 +1,4 @@
-# INV Utility – IIS deployment
+# Inventory Utility – IIS deployment
 
 How it runs on the server. Both parts are IIS sites, managed in IIS Manager:
 

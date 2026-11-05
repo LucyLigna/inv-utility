@@ -1,4 +1,4 @@
--- Creates the invutility database for INV Utility on a new MySQL 8 server.
+-- Creates the invutility database for Inventory Utility on a new MySQL 8 server.
 -- Generated from the live database on 2026-11-04 by: npm run db:script
 -- Run it as a user that may create databases, e.g.:  mysql -u root -p < invutility-create.sql
 -- Safe to run again: existing tables and rows are left as they are.

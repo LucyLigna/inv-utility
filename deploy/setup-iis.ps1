@@ -1,4 +1,4 @@
-# Installs or updates INV Utility on an IIS server. Run in an Administrator PowerShell
+# Installs or updates Inventory Utility on an IIS server. Run in an Administrator PowerShell
 # from the extracted package folder:
 #   powershell -ExecutionPolicy Bypass -File .\setup-iis.ps1 -Port 8080
 # Re-run the same command with a newer package to update; backend\.env on the server is kept.

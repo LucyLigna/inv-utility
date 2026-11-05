@@ -61,7 +61,7 @@ export default function Login() {
             <LockOutlined />
           </Box>
           <Box>
-            <Typography sx={{ fontSize: 20, fontWeight: 700, color: BLUE }}>INV Utility</Typography>
+            <Typography sx={{ fontSize: 20, fontWeight: 700, color: BLUE }}>Inventory Utility</Typography>
             <Typography variant="body2" color="text.secondary">
               {step === 'login' ? 'Sign in to continue' : `Create a password for ${username}`}
             </Typography>
