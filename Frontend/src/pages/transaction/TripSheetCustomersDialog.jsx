@@ -119,8 +119,8 @@ export default function TripSheetCustomersDialog({ sheet, onClose }) {
                             <TableCell sx={{ ...cell, whiteSpace: 'nowrap' }}>
                               {d ? (
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                  <Tooltip title={`Scanned by ${d.driver_name || 'the driver'}`}>
-                                    <Chip size="small" color="success" icon={<CheckCircle />} label={showDateTime(d.delivered_at)} sx={{ height: 22 }} />
+                                  <Tooltip title={`${d.method === 'Manual' ? 'Marked without scanning' : 'QR scanned'} by ${d.driver_name || 'the driver'}`}>
+                                    <Chip size="small" color="success" icon={<CheckCircle />} label={`${showDateTime(d.delivered_at)}${d.method === 'Manual' ? ' · manual' : ''}`} sx={{ height: 22 }} />
                                   </Tooltip>
                                   {d.latitude != null ? (
                                     <Tooltip title={`Show on map (accurate to about ${d.accuracy_m ?? '?'} m)`}>

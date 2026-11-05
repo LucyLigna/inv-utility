@@ -114,34 +114,54 @@ router.post('/deliver', async (req, res, next) => {
   if (tscNo && tscNo !== req.driver.tscNo) {
     return res.status(400).json({ message: `This QR code is for trip sheet ${tscNo}, not your trip ${req.driver.tscNo}` });
   }
-  const num = (v, min, max) => (Number.isFinite(Number(v)) && v !== null && v !== '' && Number(v) >= min && Number(v) <= max ? Number(v) : null);
-  const lat = num(req.body.latitude, -90, 90);
-  const lng = num(req.body.longitude, -180, 180);
-  const accuracy = num(req.body.accuracy, 0, 1e6);
   try {
     const sheet = await findSheet(req.driver.tsCode);
     const stop = (await sheetStops(sheet)).find((s) => s.code === code);
     if (!stop) return res.status(404).json({ message: 'This code is not for any customer on your trip' });
-    if (stop.delivered) return res.json({ name: stop.name, delivered_at: stop.delivered.delivered_at, already: true });
-    const [company, branch, customer] = stop.key.split('|');
-    await pool.query(
-      `INSERT IGNORE INTO trip_sheet_delivery (ts_code, company_code, ba_code, cu_code, delivered_at, driver_code, latitude, longitude, accuracy_m)
-       VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?)`,
-      [sheet.code, company, branch, customer, req.driver.code, lat, lng, accuracy === null ? null : Math.round(accuracy)]
-    );
-    const [[mark]] = await pool.query(
-      `SELECT DATE_FORMAT(delivered_at, '%Y-%m-%d %H:%i') AS delivered_at FROM trip_sheet_delivery
-       WHERE ts_code = ? AND company_code = ? AND ba_code = ? AND cu_code = ?`,
-      [sheet.code, company, branch, customer]
-    );
-    writeLog(req, {
-      user: driverUser(req.driver.name), action: 'Delivered', programCode: 'P0202', module: 'Trip Sheet',
-      recordRef: sheet.tsc_no, details: `${stop.name}${lat !== null ? ` at ${lat},${lng}` : ''}`,
-    });
-    res.json({ name: stop.name, delivered_at: mark.delivered_at, already: false });
+    await markDelivered(req, res, sheet, stop, 'Scan');
   } catch (err) {
     next(err);
   }
 });
+
+// Mark by hand, without scanning: { key: the customer's key from /trip, latitude, longitude, accuracy }.
+// Recorded as method 'Manual', so the office can tell it from a scanned delivery.
+router.post('/deliver-manual', async (req, res, next) => {
+  const key = String(req.body.key || '');
+  if (!key) return res.status(400).json({ message: 'Choose the customer to mark delivered' });
+  try {
+    const sheet = await findSheet(req.driver.tsCode);
+    const stop = (await sheetStops(sheet)).find((s) => s.key === key);
+    if (!stop) return res.status(404).json({ message: 'This customer is not on your trip' });
+    await markDelivered(req, res, sheet, stop, 'Manual');
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Saves the delivery of one stop (once; a second mark answers "already delivered") with the phone's location
+async function markDelivered(req, res, sheet, stop, method) {
+  if (stop.delivered) return res.json({ name: stop.name, delivered_at: stop.delivered.delivered_at, already: true });
+  const num = (v, min, max) => (Number.isFinite(Number(v)) && v !== null && v !== '' && Number(v) >= min && Number(v) <= max ? Number(v) : null);
+  const lat = num(req.body.latitude, -90, 90);
+  const lng = num(req.body.longitude, -180, 180);
+  const accuracy = num(req.body.accuracy, 0, 1e6);
+  const [company, branch, customer] = stop.key.split('|');
+  await pool.query(
+    `INSERT IGNORE INTO trip_sheet_delivery (ts_code, company_code, ba_code, cu_code, delivered_at, driver_code, method, latitude, longitude, accuracy_m)
+     VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?)`,
+    [sheet.code, company, branch, customer, req.driver.code, method, lat, lng, accuracy === null ? null : Math.round(accuracy)]
+  );
+  const [[mark]] = await pool.query(
+    `SELECT DATE_FORMAT(delivered_at, '%Y-%m-%d %H:%i') AS delivered_at FROM trip_sheet_delivery
+     WHERE ts_code = ? AND company_code = ? AND ba_code = ? AND cu_code = ?`,
+    [sheet.code, company, branch, customer]
+  );
+  writeLog(req, {
+    user: driverUser(req.driver.name), action: method === 'Manual' ? 'Delivered (manual)' : 'Delivered', programCode: 'P0202',
+    module: 'Trip Sheet', recordRef: sheet.tsc_no, details: `${stop.name}${lat !== null ? ` at ${lat},${lng}` : ''}`,
+  });
+  return res.json({ name: stop.name, delivered_at: mark.delivered_at, already: false, method });
+}
 
 module.exports = router;

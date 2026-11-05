@@ -495,12 +495,12 @@ export default function TripSheetBills() {
                               {g.name}
                               {!g.onRoute && <Chip size="small" label="Not on route" sx={{ ml: 0.5, height: 20, fontWeight: 400 }} />}
                               {deliveries[g.key] && (
-                                <Tooltip title={`Scanned by ${deliveries[g.key].driver_name || 'the driver'}${deliveries[g.key].latitude ? ` at ${deliveries[g.key].latitude}, ${deliveries[g.key].longitude}` : ''}`}>
+                                <Tooltip title={`${deliveries[g.key].method === 'Manual' ? 'Marked without scanning' : 'QR scanned'} by ${deliveries[g.key].driver_name || 'the driver'}${deliveries[g.key].latitude ? ` at ${deliveries[g.key].latitude}, ${deliveries[g.key].longitude}` : ''}`}>
                                   <Chip
                                     size="small"
                                     color="success"
                                     icon={<CheckCircle />}
-                                    label={`Delivered ${showDate(deliveries[g.key].delivered_at.slice(0, 10))} ${deliveries[g.key].delivered_at.slice(11)}`}
+                                    label={`Delivered ${showDate(deliveries[g.key].delivered_at.slice(0, 10))} ${deliveries[g.key].delivered_at.slice(11)}${deliveries[g.key].method === 'Manual' ? ' · manual' : ''}`}
                                     sx={{ ml: 0.5, height: 20, fontWeight: 400 }}
                                   />
                                 </Tooltip>

@@ -5,7 +5,7 @@ import {
   Paper, TextField, Toolbar, Typography,
 } from '@mui/material';
 import {
-  CheckCircle, ErrorOutline, KeyboardArrowDown, KeyboardArrowUp, Logout, Phone, QrCodeScanner, Refresh,
+  CheckCircle, ErrorOutline, KeyboardArrowDown, KeyboardArrowUp, Logout, Phone, QrCodeScanner, Refresh, TaskAlt,
 } from '@mui/icons-material';
 import QrScanner from './QrScanner';
 
@@ -87,7 +87,8 @@ function Trip({ onLogout }) {
   const [trip, setTrip] = useState(null);
   const [error, setError] = useState('');
   const [scanning, setScanning] = useState(false);
-  const [result, setResult] = useState(null); // { ok, title, text }
+  const [result, setResult] = useState(null); // { ok, title, text, scanned }
+  const [confirmStop, setConfirmStop] = useState(null); // customer waiting for "Mark delivered" to be confirmed
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(new Set()); // customers showing their mobile number and bills
   const toggle = (key) => setExpanded((open) => {
@@ -109,23 +110,31 @@ function Trip({ onLogout }) {
   }, [onLogout]);
   useEffect(() => { load(); }, [load]);
 
-  // A scanned QR (or a typed code): mark that customer delivered, with the location when there is one
-  const deliver = async (text) => {
-    setScanning(false);
+  // Marks a customer delivered, with the location when there is one: by a scanned QR / typed code (path '/deliver',
+  // { text }) or by hand without scanning ('/deliver-manual', { key })
+  const mark = async (path, body, scanned) => {
     setBusy(true);
     try {
       const where = await locate();
-      const { data } = await driverApi.post('/deliver', { text, ...(where || {}) });
+      const { data } = await driverApi.post(path, { ...body, ...(where || {}) });
       setResult(data.already
-        ? { ok: true, title: 'Already delivered', text: `${data.name} was marked delivered at ${time(data.delivered_at)}.` }
-        : { ok: true, title: 'Delivered', text: `${data.name} marked delivered at ${time(data.delivered_at)}.${where ? '' : ' (Location not available.)'}` });
+        ? { ok: true, scanned, title: 'Already delivered', text: `${data.name} was marked delivered at ${time(data.delivered_at)}.` }
+        : { ok: true, scanned, title: 'Delivered', text: `${data.name} marked delivered at ${time(data.delivered_at)}.${where ? '' : ' (Location not available.)'}` });
       await load();
     } catch (err) {
       if (err.response?.status === 401) return onLogout(message(err));
-      setResult({ ok: false, title: 'Not marked', text: message(err) });
+      setResult({ ok: false, scanned, title: 'Not marked', text: message(err) });
     } finally {
       setBusy(false);
     }
+  };
+  const deliver = (text) => {
+    setScanning(false);
+    mark('/deliver', { text }, true);
+  };
+  const deliverByHand = (s) => {
+    setConfirmStop(null);
+    mark('/deliver-manual', { key: s.key }, false);
   };
 
   if (!trip) {
@@ -210,6 +219,18 @@ function Trip({ onLogout }) {
                       <span>₹ {money(s.amount)}</span>
                     </Box>
                   )}
+                  {s.delivered ? (
+                    <Typography variant="body2" sx={{ mt: 1, color: '#2e7d32', fontWeight: 600 }}>
+                      Delivered at {time(s.delivered.delivered_at)}{s.delivered.method === 'Manual' ? ' (marked without scan)' : ' (QR scanned)'}
+                    </Typography>
+                  ) : (
+                    <Button
+                      variant="outlined" color="success" fullWidth startIcon={<TaskAlt />} disabled={busy}
+                      onClick={() => setConfirmStop(s)} sx={{ mt: 1.25 }}
+                    >
+                      Mark delivered without scan
+                    </Button>
+                  )}
                 </Box>
               )}
             </Paper>
@@ -229,6 +250,24 @@ function Trip({ onLogout }) {
 
       <QrScanner open={scanning} onClose={() => setScanning(false)} onResult={deliver} />
 
+      <Dialog open={Boolean(confirmStop)} onClose={() => setConfirmStop(null)} fullWidth maxWidth="xs">
+        {confirmStop && (
+          <>
+            <DialogContent sx={{ pt: 3 }}>
+              <Typography variant="h6" fontWeight={700} mb={1}>Mark delivered?</Typography>
+              <Typography>
+                <b>{confirmStop.name}</b> ({confirmStop.bills.length} bill{confirmStop.bills.length > 1 ? 's' : ''}, {confirmStop.cases} cases)
+                will be marked delivered now, without scanning its QR code.
+              </Typography>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setConfirmStop(null)}>Cancel</Button>
+              <Button variant="contained" color="success" onClick={() => deliverByHand(confirmStop)}>Mark delivered</Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
+
       <Dialog open={Boolean(result)} onClose={() => setResult(null)} fullWidth maxWidth="xs">
         {result && (
           <>
@@ -241,7 +280,7 @@ function Trip({ onLogout }) {
             </DialogContent>
             <DialogActions>
               <Button onClick={() => setResult(null)}>OK</Button>
-              <Button variant="contained" onClick={() => { setResult(null); setScanning(true); }}>Scan next</Button>
+              {result.scanned && <Button variant="contained" onClick={() => { setResult(null); setScanning(true); }}>Scan next</Button>}
             </DialogActions>
           </>
         )}
@@ -260,7 +299,7 @@ export default function DriverApp() {
   }, []);
 
   useEffect(() => {
-    document.title = 'INV Delivery';
+    document.title = 'Inventory Delivery';
   }, []);
 
   if (!loggedIn) {

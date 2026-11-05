@@ -31,7 +31,7 @@ function readScan(text) {
 async function deliveries(tsCode) {
   const [rows] = await pool.query(
     `SELECT v.company_code, v.ba_code, v.cu_code, DATE_FORMAT(v.delivered_at, '%Y-%m-%d %H:%i') AS delivered_at,
-       d.name AS driver_name, v.latitude, v.longitude, v.accuracy_m
+       d.name AS driver_name, v.method, v.latitude, v.longitude, v.accuracy_m
      FROM trip_sheet_delivery v LEFT JOIN driver d ON d.code = v.driver_code WHERE v.ts_code = ?`,
     [tsCode]
   );

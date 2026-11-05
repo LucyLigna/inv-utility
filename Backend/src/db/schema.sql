@@ -139,6 +139,7 @@ CREATE TABLE IF NOT EXISTS trip_sheet_delivery (
   cu_code      VARCHAR(8)   NOT NULL,
   delivered_at DATETIME     NOT NULL,
   driver_code  INT          NOT NULL,
+  method       ENUM('Scan','Manual') NOT NULL DEFAULT 'Scan', -- Manual: marked on the driver page without scanning
   latitude     DECIMAL(10,7) DEFAULT NULL, -- phone location at the scan, when the driver allowed it
   longitude    DECIMAL(10,7) DEFAULT NULL,
   accuracy_m   INT          DEFAULT NULL,

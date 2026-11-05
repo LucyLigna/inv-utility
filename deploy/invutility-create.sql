@@ -1,5 +1,5 @@
 -- Creates the invutility database for Inventory Utility on a new MySQL 8 server.
--- Generated from the live database on 2026-11-04 by: npm run db:script
+-- Generated from the live database on 2026-11-05 by: npm run db:script
 -- Run it as a user that may create databases, e.g.:  mysql -u root -p < invutility-create.sql
 -- Safe to run again: existing tables and rows are left as they are.
 
@@ -374,6 +374,7 @@ CREATE TABLE IF NOT EXISTS `trip_sheet_delivery` (
   `cu_code` varchar(8) COLLATE utf8mb4_unicode_ci NOT NULL,
   `delivered_at` datetime NOT NULL,
   `driver_code` int NOT NULL,
+  `method` enum('Scan','Manual') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Scan',
   `latitude` decimal(10,7) DEFAULT NULL,
   `longitude` decimal(10,7) DEFAULT NULL,
   `accuracy_m` int DEFAULT NULL,
