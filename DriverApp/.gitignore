@@ -1,0 +1,8 @@
+node_modules
+# Built from ../Frontend (npm run build:web)
+www
+
+# Signing keys for the release APK: keep safe, never commit
+*.jks
+*.keystore
+keystore.properties

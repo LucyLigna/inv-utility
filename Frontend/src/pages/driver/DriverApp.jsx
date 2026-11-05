@@ -17,8 +17,22 @@ const store = {
   get: () => { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } },
   set: (t) => { try { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); } catch { /* not kept */ } },
 };
-const driverApi = axios.create({ baseURL: '/api/driver' });
+// In the Android app (DriverApp/, built with --mode driver) the page doesn't come from the server, so it calls the
+// server's address: VITE_DRIVER_SERVER by default, changeable on the login screen. On the web it calls its own site.
+const IN_APP = Boolean(import.meta.env.VITE_DRIVER_SERVER);
+const SERVER_KEY = 'inv_driver_server';
+export const serverAddress = {
+  get: () => {
+    if (!IN_APP) return '';
+    try { return localStorage.getItem(SERVER_KEY) || import.meta.env.VITE_DRIVER_SERVER; } catch { return import.meta.env.VITE_DRIVER_SERVER; }
+  },
+  set: (v) => { try { localStorage.setItem(SERVER_KEY, v); } catch { /* default is used */ } },
+};
+const cleanServer = (v) => String(v || '').trim().replace(/\/+$/, '').replace(/^(?!https?:\/\/)/i, 'http://');
+
+const driverApi = axios.create({ timeout: 30000 });
 driverApi.interceptors.request.use((config) => {
+  config.baseURL = `${serverAddress.get()}/api/driver`;
   const token = store.get();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
@@ -43,10 +57,17 @@ function Login({ onLogin }) {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [server, setServer] = useState(serverAddress.get());
+  const [editServer, setEditServer] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
+    if (IN_APP) {
+      const clean = cleanServer(server);
+      setServer(clean);
+      serverAddress.set(clean);
+    }
     try {
       const { data } = await driverApi.post('/login', { mobile, pin });
       store.set(data.token);
@@ -78,6 +99,20 @@ function Login({ onLogin }) {
         <Button type="submit" variant="contained" size="large" fullWidth disabled={busy || !mobile || pin.length !== 4}>
           {busy ? <CircularProgress size={24} color="inherit" /> : 'Log in'}
         </Button>
+        {/* App only: which server to use (e.g. http://192.168.3.24:8080 on office Wi-Fi) */}
+        {IN_APP && (editServer ? (
+          <TextField
+            label="Server address" fullWidth size="small" value={server} onChange={(e) => setServer(e.target.value)}
+            helperText="Saved when you log in" inputProps={{ inputMode: 'url', autoCapitalize: 'none', autoCorrect: 'off' }} sx={{ mt: 2 }}
+          />
+        ) : (
+          <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 2, textAlign: 'center' }}>
+            Server: {server}{' '}
+            <Box component="span" role="button" onClick={() => setEditServer(true)} sx={{ color: 'primary.main', cursor: 'pointer', fontWeight: 600 }}>
+              Change
+            </Box>
+          </Typography>
+        ))}
       </Paper>
     </Box>
   );

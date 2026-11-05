@@ -2,6 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     { "name": "backend", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "Backend", "run", "dev"], "port": 5050, "autoPort": false },
-    { "name": "frontend", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "Frontend", "run", "dev"], "port": 3050, "autoPort": false }
+    { "name": "frontend", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "Frontend", "run", "dev"], "port": 3050, "autoPort": false },
+    { "name": "driver-app", "runtimeExecutable": "npx", "runtimeArgs": ["--prefix", "Frontend", "vite", "preview", "--config", "Frontend/vite.driver.config.js", "--port", "3060", "--strictPort"], "port": 3060, "autoPort": false }
   ]
 }

@@ -1,0 +1,13 @@
+{
+  "appId": "com.nkgautogroup.delivery",
+  "appName": "Inventory Delivery",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "http",
+    "hostname": "localhost",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "inventory-delivery-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Android app (Capacitor) for the driver delivery page of Inventory Utility",
+  "scripts": {
+    "build:web": "npm --prefix ../Frontend run build:driver",
+    "sync": "npm run build:web && npx cap sync android",
+    "open": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.6.10",
+    "@capacitor/core": "^7.6.10"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.6.10"
+  }
+}
