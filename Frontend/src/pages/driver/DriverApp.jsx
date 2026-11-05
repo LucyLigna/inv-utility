@@ -130,6 +130,7 @@ function Trip({ onLogout }) {
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState(null); // { ok, title, text, scanned }
   const [confirmStop, setConfirmStop] = useState(null); // customer waiting for "Mark delivered" to be confirmed
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(new Set()); // customers showing their mobile number and bills
   const toggle = (key) => setExpanded((open) => {
@@ -200,7 +201,7 @@ function Trip({ onLogout }) {
             </Typography>
           </Box>
           <IconButton color="inherit" onClick={load} aria-label="refresh"><Refresh /></IconButton>
-          <IconButton color="inherit" onClick={() => onLogout()} aria-label="log out"><Logout /></IconButton>
+          <IconButton color="inherit" onClick={() => setConfirmLogout(true)} aria-label="log out"><Logout /></IconButton>
         </Toolbar>
         <LinearProgress variant="determinate" value={stops.length ? (done / stops.length) * 100 : 0} color="success" sx={{ height: 5 }} />
       </AppBar>
@@ -296,6 +297,17 @@ function Trip({ onLogout }) {
       </Box>
 
       <QrScanner open={scanning} onClose={() => setScanning(false)} onResult={deliver} />
+
+      <Dialog open={confirmLogout} onClose={() => setConfirmLogout(false)} fullWidth maxWidth="xs">
+        <DialogContent sx={{ pt: 3 }}>
+          <Typography variant="h6" fontWeight={700} mb={1}>Log out?</Typography>
+          <Typography>To log in again you need your mobile number and the driver code for the trip.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmLogout(false)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={() => { setConfirmLogout(false); onLogout(); }}>Log out</Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={Boolean(confirmStop)} onClose={() => setConfirmStop(null)} fullWidth maxWidth="xs">
         {confirmStop && (
