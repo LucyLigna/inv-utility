@@ -15,15 +15,21 @@ work even while the server is plain `http://nkgautogroup.com:8080`.
 | App id | `com.nkgautogroup.delivery` |
 | Default server | `http://nkgautogroup.com:8080` (in `Frontend/.env.driver`; the driver can change it on the login screen, e.g. `http://192.168.3.24:8080` on office Wi-Fi) |
 | Permissions | Internet, camera (QR scan), location (saved with each delivery) |
+| Phones | Android 7.0 and newer |
 
 ## One-time setup on the PC that builds the APK
 
 1. Install **Android Studio** (free): https://developer.android.com/studio — it brings the Android SDK and Java.
-2. Open Android Studio once and let it finish downloading the SDK (More Actions → SDK Manager: Android 15 / API 35).
+2. Open Android Studio once and let it finish downloading the SDK (More Actions → SDK Manager: Android 16 / API 36;
+   the first build also downloads what it is missing).
 3. Install **Node.js 22 LTS** if it isn't there.
 4. In this folder: `npm install` (and `npm install` in `../Frontend` if not done).
 
 ## Build the APK
+
+The project uses Capacitor 8, the Android Gradle plugin 8.13 and Gradle 9.1 (`android/gradle/wrapper`), which runs
+on the Java 25 that comes with Android Studio. From the command line, set `JAVA_HOME` to Android Studio's `jbr`
+folder, e.g. `C:\Program Files\Android\Android Studio\jbr`, then run `android\gradlew.bat assembleDebug`.
 
 From `DriverApp/`:
 
