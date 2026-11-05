@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import {
   Alert, AppBar, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, IconButton, LinearProgress,
@@ -60,14 +60,16 @@ function Login({ onLogin }) {
   const [busy, setBusy] = useState(false);
   const [server, setServer] = useState(serverAddress.get());
   const [editServer, setEditServer] = useState(false);
+  const taps = useRef(0); // taps on the scanner icon; 5 show the server address (for testing)
 
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
-    if (IN_APP) {
-      const clean = cleanServer(server);
-      setServer(clean);
+    if (IN_APP && editServer) {
+      // Empty goes back to the default server
+      const clean = String(server || '').trim() ? cleanServer(server) : '';
       serverAddress.set(clean);
+      setServer(serverAddress.get());
     }
     try {
       const { data } = await driverApi.post('/login', { mobile, pin });
@@ -89,7 +91,10 @@ function Login({ onLogin }) {
     >
       <Paper component="form" onSubmit={submit} sx={{ p: 3, width: '100%', maxWidth: 380 }}>
         <Box sx={{ textAlign: 'center', mb: 2 }}>
-          <QrCodeScanner sx={{ fontSize: 44, color: 'primary.main' }} />
+          <QrCodeScanner
+            sx={{ fontSize: 44, color: 'primary.main' }}
+            onClick={() => { taps.current += 1; if (taps.current >= 5) setEditServer(true); }}
+          />
           <Typography variant="h6" fontWeight={700}>Delivery</Typography>
           <Typography variant="body2" color="text.secondary">Log in with your mobile number and the driver code for your trip</Typography>
         </Box>
@@ -105,20 +110,15 @@ function Login({ onLogin }) {
         <Button type="submit" variant="contained" size="large" fullWidth disabled={busy || !mobile || pin.length !== 4}>
           {busy ? <CircularProgress size={24} color="inherit" /> : 'Log in'}
         </Button>
-        {/* App only: which server to use (e.g. http://192.168.3.24:8080 on office Wi-Fi) */}
-        {IN_APP && (editServer ? (
+        {/* App only, hidden from drivers: another server for testing (e.g. http://10.0.2.2:5050 in the emulator).
+            Shown after tapping the scanner icon above 5 times; empty = the default server. */}
+        {IN_APP && editServer && (
           <TextField
             label="Server address" fullWidth size="small" value={server} onChange={(e) => setServer(e.target.value)}
-            helperText="Saved when you log in" inputProps={{ inputMode: 'url', autoCapitalize: 'none', autoCorrect: 'off' }} sx={{ mt: 2 }}
+            helperText={`Saved when you log in. Empty: ${import.meta.env.VITE_DRIVER_SERVER}`}
+            inputProps={{ inputMode: 'url', autoCapitalize: 'none', autoCorrect: 'off' }} sx={{ mt: 2 }}
           />
-        ) : (
-          <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 2, textAlign: 'center' }}>
-            Server: {server}{' '}
-            <Box component="span" role="button" onClick={() => setEditServer(true)} sx={{ color: 'primary.main', cursor: 'pointer', fontWeight: 600 }}>
-              Change
-            </Box>
-          </Typography>
-        ))}
+        )}
       </Paper>
     </Box>
   );
