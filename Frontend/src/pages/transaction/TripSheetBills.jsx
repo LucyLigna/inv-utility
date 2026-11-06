@@ -30,6 +30,25 @@ const snapshot = (selected, customOrder) => JSON.stringify(
   arrange(byCustomer([...selected.values()]), customOrder).flatMap((g) => g.bills.map(billKey))
 );
 
+// A customer not on the sheet's route: a map icon; the tip says so, and clicking it (with the right to Trip Route
+// Wise Customers) opens "Map to route"
+function NotOnRoute({ canMap, onMap }) {
+  return (
+    <Tooltip title={canMap ? 'Not on route: click to map this customer to the route' : 'Not on route'}>
+      {canMap ? (
+        <IconButton
+          size="small" aria-label="not on route, map to the route" sx={{ p: 0.25, color: '#c77700' }}
+          onClick={(e) => { e.stopPropagation(); onMap(); }}
+        >
+          <AddLocationAlt fontSize="small" />
+        </IconButton>
+      ) : (
+        <AddLocationAlt fontSize="small" aria-label="not on route" sx={{ color: '#c77700', ml: 0.25 }} />
+      )}
+    </Tooltip>
+  );
+}
+
 export default function TripSheetBills() {
   const [sheets, setSheets] = useState([]);
   const [picked, setPicked] = useState(null); // sheet chosen in the box
@@ -493,7 +512,7 @@ export default function TripSheetBills() {
                                 {open ? <KeyboardArrowDown fontSize="small" /> : <KeyboardArrowRight fontSize="small" />}
                               </IconButton>
                               {g.name}
-                              {!g.onRoute && <Chip size="small" label="Not on route" sx={{ ml: 0.5, height: 20, fontWeight: 400 }} />}
+                              {!g.onRoute && <NotOnRoute canMap={canMap} onMap={() => openMap(g.bills[0], g.name)} />}
                               {/* Delivered: a tick; the tip says when, how and by whom. With a saved location, clicking it
                                   opens that place on Google Maps (the phone sends a location only when allowed / over https). */}
                               {deliveries[g.key] && (() => {
@@ -524,11 +543,6 @@ export default function TripSheetBills() {
                                   </Tooltip>
                                 );
                               })()}
-                              {!g.onRoute && canMap && (
-                                <Button size="small" startIcon={<AddLocationAlt />} onClick={() => openMap(g.bills[0], g.name)} sx={{ py: 0, minWidth: 0 }}>
-                                  Map
-                                </Button>
-                              )}
                             </Box>
                           </TableCell>
                           <TableCell sx={cell}>{g.company_branch}</TableCell>
@@ -688,15 +702,7 @@ export default function TripSheetBills() {
                         </TableCell>
                         <TableCell sx={cell}>
                           {b.cuc_desc}
-                          {b.route_order == null && <Chip size="small" label="Not on route" sx={{ ml: 1, height: 20 }} />}
-                          {b.route_order == null && canMap && (
-                            <Button
-                              size="small" startIcon={<AddLocationAlt />} sx={{ py: 0, ml: 0.5, minWidth: 0 }}
-                              onClick={(e) => { e.stopPropagation(); openMap(b, b.cuc_desc); }}
-                            >
-                              Map
-                            </Button>
-                          )}
+                          {b.route_order == null && <> <NotOnRoute canMap={canMap} onMap={() => openMap(b, b.cuc_desc)} /></>}
                         </TableCell>
                         <TableCell sx={{ ...cell, whiteSpace: 'nowrap' }}>{b.company_branch}</TableCell>
                         <TableCell sx={num}>{b.net_amount == null ? '—' : money(b.net_amount)}</TableCell>
