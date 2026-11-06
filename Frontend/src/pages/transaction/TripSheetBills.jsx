@@ -4,7 +4,7 @@ import {
   TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import {
-  AddCircleOutline, AddLocationAlt, CheckCircle, EditOutlined, NoteAdd, LockOpenOutlined, TaskAlt, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, LocationOff, LocationOn, PlayArrow, PlaylistAdd, Refresh,
+  AddCircleOutline, AddLocationAlt, CheckCircle, EditOutlined, NoteAdd, LockOpenOutlined, TaskAlt, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, PlaylistAdd, Refresh,
   Save, Sort, SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
@@ -494,37 +494,36 @@ export default function TripSheetBills() {
                               </IconButton>
                               {g.name}
                               {!g.onRoute && <Chip size="small" label="Not on route" sx={{ ml: 0.5, height: 20, fontWeight: 400 }} />}
-                              {deliveries[g.key] && (
-                                <Tooltip title={`${deliveries[g.key].method === 'Manual' ? 'Marked without scanning' : 'QR scanned'} by ${deliveries[g.key].driver_name || 'the driver'}${deliveries[g.key].latitude ? ` at ${deliveries[g.key].latitude}, ${deliveries[g.key].longitude}` : ''}`}>
-                                  <Chip
-                                    size="small"
-                                    color="success"
-                                    icon={<CheckCircle />}
-                                    label={`Delivered ${showDate(deliveries[g.key].delivered_at.slice(0, 10))} ${deliveries[g.key].delivered_at.slice(11)}${deliveries[g.key].method === 'Manual' ? ' · manual' : ''}`}
-                                    sx={{ ml: 0.5, height: 20, fontWeight: 400 }}
-                                  />
-                                </Tooltip>
-                              )}
-                              {/* Where the driver scanned the QR, on Google Maps (the phone sends a location only over https) */}
-                              {deliveries[g.key] && (deliveries[g.key].latitude != null ? (
-                                <Tooltip title={`Show on map (accurate to about ${deliveries[g.key].accuracy_m ?? '?'} m)`}>
-                                  <IconButton
-                                    size="small"
-                                    component="a"
-                                    href={`https://www.google.com/maps/search/?api=1&query=${deliveries[g.key].latitude},${deliveries[g.key].longitude}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    aria-label="show delivery location on map"
-                                    sx={{ p: 0.25, color: '#c62828' }}
-                                  >
-                                    <LocationOn fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                              ) : (
-                                <Tooltip title="No location: the phone did not send one (location needs the https address, and the driver must allow it)">
-                                  <LocationOff fontSize="small" sx={{ color: '#b0b4bd' }} />
-                                </Tooltip>
-                              ))}
+                              {/* Delivered: a tick; the tip says when, how and by whom. With a saved location, clicking it
+                                  opens that place on Google Maps (the phone sends a location only when allowed / over https). */}
+                              {deliveries[g.key] && (() => {
+                                const d = deliveries[g.key];
+                                const hasLocation = d.latitude != null;
+                                const tip = (
+                                  <>
+                                    <b>Delivered {showDate(d.delivered_at.slice(0, 10))} {d.delivered_at.slice(11)}</b>
+                                    <br />
+                                    {d.method === 'Manual' ? 'Marked without scanning' : 'QR scanned'} by {d.driver_name || 'the driver'}
+                                    <br />
+                                    {hasLocation ? `Click to show the place on the map (accurate to about ${d.accuracy_m ?? '?'} m)` : 'No location was sent'}
+                                  </>
+                                );
+                                return (
+                                  <Tooltip title={tip}>
+                                    {hasLocation ? (
+                                      <IconButton
+                                        size="small" component="a" target="_blank" rel="noopener noreferrer"
+                                        href={`https://www.google.com/maps/search/?api=1&query=${d.latitude},${d.longitude}`}
+                                        aria-label="delivered, show the place on the map" sx={{ p: 0.25, color: '#2e7d32' }}
+                                      >
+                                        <CheckCircle fontSize="small" />
+                                      </IconButton>
+                                    ) : (
+                                      <CheckCircle fontSize="small" aria-label="delivered" sx={{ color: '#2e7d32', ml: 0.25 }} />
+                                    )}
+                                  </Tooltip>
+                                );
+                              })()}
                               {!g.onRoute && canMap && (
                                 <Button size="small" startIcon={<AddLocationAlt />} onClick={() => openMap(g.bills[0], g.name)} sx={{ py: 0, minWidth: 0 }}>
                                   Map
