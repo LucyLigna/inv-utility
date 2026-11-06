@@ -102,7 +102,8 @@ function BranchSummary({ groups, allBills }) {
 // Each customer takes a quarter of the page (A4 portrait leaves about 273 mm), four customers to a page
 const CUSTOMERS_PER_PAGE = 4;
 const CUSTOMER_BLOCK_HEIGHT = '60mm';
-const QR_SIZE = '30mm';
+// Whole pixels (about 30 mm), so the box's border lines print the same width on every side
+const QR_BOX_WIDTH = 114;
 
 function CustomerBills({ groups, allBills, contacts, qr }) {
   const info = { ...td, fontSize: 12, background: '#f7f7f7' };
@@ -116,7 +117,7 @@ function CustomerBills({ groups, allBills, contacts, qr }) {
           <div
             key={g.key}
             style={{
-              breakInside: 'avoid', minHeight: CUSTOMER_BLOCK_HEIGHT, display: 'flex', alignItems: 'flex-start', gap: '3mm',
+              breakInside: 'avoid', minHeight: CUSTOMER_BLOCK_HEIGHT, display: 'flex', alignItems: 'flex-start', gap: 12,
               ...(pageEnds && { breakAfter: 'page' }),
             }}
           >
@@ -166,7 +167,13 @@ function CustomerBills({ groups, allBills, contacts, qr }) {
               </tbody>
             </table>
             {q && (
-              <div style={{ width: QR_SIZE, flex: 'none', textAlign: 'center', border: '1px solid #555', padding: '1.5mm' }}>
+              <div
+                style={{
+                  width: QR_BOX_WIDTH, flex: 'none', boxSizing: 'border-box', textAlign: 'center', border: '1px solid #555', padding: 6,
+                  // kept 1 px clear of the page edge, so the right border isn't cut thinner
+                  marginRight: 1,
+                }}
+              >
                 <img src={q.image} alt={`Delivery QR ${q.code}`} style={{ width: '100%', display: 'block' }} />
                 <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, marginTop: 2 }}>{q.code}</div>
                 <div style={{ fontSize: 9 }}>Scan on delivery</div>
