@@ -91,7 +91,9 @@ async function main() {
   for (const v of views) {
     const [[row]] = await pool.query(`SHOW CREATE VIEW \`${v}\``);
     const sql = row['Create View']
-      .replace(/^CREATE .*?VIEW/, 'CREATE OR REPLACE VIEW') // drop DEFINER, so any user can run the script
+      // No DEFINER (any user can run the script) and SQL SECURITY INVOKER: the view runs with the rights of whoever
+      // reads it, so it keeps working when the account that created it doesn't exist (error 1449)
+      .replace(/^CREATE .*?VIEW/, 'CREATE OR REPLACE SQL SECURITY INVOKER VIEW')
       .replaceAll(`\`${db}\`.`, ''); // no database name inside, in case it is created under another name
     out.push(`-- ${v}`, `${sql};`, '');
   }

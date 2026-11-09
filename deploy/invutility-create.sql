@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS `driver` (
   `code` int NOT NULL AUTO_INCREMENT,
   `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `short_code` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `mobile` varchar(15) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `mobile` varchar(15) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `status` enum('Active','Inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Active',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -94,11 +94,11 @@ CREATE TABLE IF NOT EXISTS `driver` (
 
 -- record_lock
 CREATE TABLE IF NOT EXISTS `record_lock` (
-  `lock_type` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `record_id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `lock_id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `lock_type` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `record_id` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `lock_id` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `user_code` int DEFAULT NULL,
-  `username` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `username` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `locked_at` datetime NOT NULL,
   `seen_at` datetime NOT NULL,
   PRIMARY KEY (`lock_type`,`record_id`)
@@ -121,26 +121,26 @@ CREATE TABLE IF NOT EXISTS `route` (
 
 -- salesdetails
 CREATE TABLE IF NOT EXISTS `salesdetails` (
-  `company_code` varchar(3) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `ba_code` varchar(4) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `sm_slno` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `cu_code` varchar(8) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `cuc_desc` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `roc_desc` varchar(40) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `smc_no` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `company_code` varchar(3) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `ba_code` varchar(4) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `sm_slno` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `cu_code` varchar(8) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `cuc_desc` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `roc_desc` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `smc_no` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `smd_date` date DEFAULT NULL,
-  `tp_code` varchar(4) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `tpc_desc` varchar(40) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `transporter_type` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `tp_code` varchar(4) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `tpc_desc` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `transporter_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `net_amount` decimal(12,2) DEFAULT NULL,
   `pack_qty` int DEFAULT NULL,
-  `eway_billno` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `checked_ok` varchar(1) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `printed` varchar(3) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `eway_billno` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `checked_ok` varchar(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `printed` varchar(3) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `inp_dt_tm` datetime DEFAULT NULL,
   `is_manual` tinyint(1) NOT NULL DEFAULT '0',
-  `cu_company_code` varchar(3) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `cu_ba_code` varchar(4) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `cu_company_code` varchar(3) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `cu_ba_code` varchar(4) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `manual_by` int DEFAULT NULL,
   PRIMARY KEY (`company_code`,`ba_code`,`sm_slno`),
   KEY `idx_salesdetails_cu` (`company_code`,`ba_code`,`cu_code`),
@@ -216,8 +216,8 @@ CREATE TABLE IF NOT EXISTS `sys_programfile` (
 
 -- sys_settings
 CREATE TABLE IF NOT EXISTS `sys_settings` (
-  `setting_key` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `setting_value` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `setting_key` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `setting_value` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   PRIMARY KEY (`setting_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -226,13 +226,13 @@ CREATE TABLE IF NOT EXISTS `sys_user_log` (
   `log_id` bigint NOT NULL AUTO_INCREMENT,
   `log_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `user_code` int DEFAULT NULL,
-  `username` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `action` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `program_code` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `module` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `record_ref` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `details` varchar(1000) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `ip_address` varchar(45) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `username` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `action` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `program_code` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `module` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `record_ref` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `details` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `ip_address` varchar(45) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   PRIMARY KEY (`log_id`),
   KEY `ix_sys_user_log_time` (`log_time`),
   KEY `ix_sys_user_log_user` (`user_code`,`log_time`)
@@ -241,10 +241,10 @@ CREATE TABLE IF NOT EXISTS `sys_user_log` (
 -- sys_users
 CREATE TABLE IF NOT EXISTS `sys_users` (
   `user_code` int NOT NULL AUTO_INCREMENT,
-  `username` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `password_hash` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `user_type` enum('Administrator','User') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'User',
-  `status` enum('Active','Inactive') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Active',
+  `username` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `password_hash` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `user_type` enum('Administrator','User') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'User',
+  `status` enum('Active','Inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Active',
   `password_set_at` datetime DEFAULT NULL,
   `last_login_at` datetime DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -258,7 +258,7 @@ CREATE TABLE IF NOT EXISTS `sys_users` (
 -- sys_user_rights
 CREATE TABLE IF NOT EXISTS `sys_user_rights` (
   `user_code` int NOT NULL,
-  `program_code` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `program_code` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `created_by` int DEFAULT NULL COMMENT 'user_code of the user who created the row',
   `updated_by` int DEFAULT NULL COMMENT 'user_code of the user who last changed the row',
   PRIMARY KEY (`user_code`,`program_code`),
@@ -340,12 +340,12 @@ CREATE TABLE IF NOT EXISTS `trip_sheet` (
   `start_date` date DEFAULT NULL,
   `end_date` date DEFAULT NULL,
   `remarks` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `status` enum('Active','Cancelled','Closed') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Active',
+  `status` enum('Active','Cancelled','Closed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Active',
   `cancelled_at` datetime DEFAULT NULL,
   `closed_at` datetime DEFAULT NULL,
   `total_bills` int NOT NULL DEFAULT '0',
   `total_pack_qty` int NOT NULL DEFAULT '0',
-  `driver_pin` char(4) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `driver_pin` char(4) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `driver_pin_from` datetime DEFAULT NULL,
   `driver_pin_till` datetime DEFAULT NULL,
   `bills_completed_at` datetime DEFAULT NULL,
@@ -364,9 +364,9 @@ CREATE TABLE IF NOT EXISTS `trip_sheet` (
 -- trip_sheet_bills
 CREATE TABLE IF NOT EXISTS `trip_sheet_bills` (
   `ts_code` int NOT NULL,
-  `company_code` varchar(3) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `ba_code` varchar(4) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `sm_slno` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `company_code` varchar(3) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `ba_code` varchar(4) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `sm_slno` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `pack_qty` int DEFAULT NULL,
   `amount` decimal(12,2) DEFAULT NULL,
   `sort_order` int DEFAULT NULL,
@@ -381,12 +381,12 @@ CREATE TABLE IF NOT EXISTS `trip_sheet_bills` (
 -- trip_sheet_delivery
 CREATE TABLE IF NOT EXISTS `trip_sheet_delivery` (
   `ts_code` int NOT NULL,
-  `company_code` varchar(3) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `ba_code` varchar(4) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `cu_code` varchar(8) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `company_code` varchar(3) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `ba_code` varchar(4) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `cu_code` varchar(8) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `delivered_at` datetime NOT NULL,
   `driver_code` int NOT NULL,
-  `method` enum('Scan','Manual') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Scan',
+  `method` enum('Scan','Manual') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Scan',
   `latitude` decimal(10,7) DEFAULT NULL,
   `longitude` decimal(10,7) DEFAULT NULL,
   `accuracy_m` int DEFAULT NULL,
@@ -409,10 +409,10 @@ CREATE TABLE IF NOT EXISTS `vehiclenumber` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- view_branch_list
-CREATE OR REPLACE VIEW `view_branch_list` AS select `company`.`company_code` AS `company_code`,`branch`.`ba_code` AS `ba_code`,concat(`company`.`short_code`,' - ',`branch`.`brc_desc`) AS `company_branch`,concat(`company`.`short_code`,' - ',`branch`.`brc_alias`) AS `company_branch_code`,`company`.`coc_desc` AS `coc_desc`,`branch`.`brc_desc` AS `brc_desc` from (`branch` join `company` on((`company`.`company_code` = `branch`.`company_code`)));
+CREATE OR REPLACE SQL SECURITY INVOKER VIEW `view_branch_list` AS select `company`.`company_code` AS `company_code`,`branch`.`ba_code` AS `ba_code`,concat(`company`.`short_code`,' - ',`branch`.`brc_desc`) AS `company_branch`,concat(`company`.`short_code`,' - ',`branch`.`brc_alias`) AS `company_branch_code`,`company`.`coc_desc` AS `coc_desc`,`branch`.`brc_desc` AS `brc_desc` from (`branch` join `company` on((`company`.`company_code` = `branch`.`company_code`)));
 
 -- view_customer_list
-CREATE OR REPLACE VIEW `view_customer_list` AS select `company`.`coc_desc` AS `company_name`,`branch`.`brc_desc` AS `branch_name`,concat(`company`.`short_code`,' - ',`branch`.`brc_desc`) AS `company_branch`,concat(`company`.`short_code`,' - ',`branch`.`brc_alias`) AS `company_branch_code`,`territory`.`trc_desc` AS `terriotry_name`,`territory`.`ro_code` AS `ro_code`,`route`.`roc_desc` AS `route_name`,`route`.`se_code` AS `se_code`,`salesexecutive`.`sec_desc` AS `salesexecutive_name`,`customer`.`company_code` AS `company_code`,`customer`.`cu_code` AS `cu_code`,`customer`.`sa_code` AS `sa_code`,`customer`.`cuc_desc` AS `cuc_desc`,`customer`.`cuc_alias` AS `cuc_alias`,`customer`.`cuc_add1` AS `cuc_add1`,`customer`.`cuc_add2` AS `cuc_add2`,`customer`.`cuc_add3` AS `cuc_add3`,`customer`.`cuc_add4` AS `cuc_add4`,`customer`.`cuc_pincode` AS `cuc_pincode`,`customer`.`cuc_mobile` AS `cuc_mobile`,`customer`.`tr_code` AS `tr_code`,`customer`.`ba_code` AS `ba_code`,`customer`.`cun_creditlimit` AS `cun_creditlimit`,`customer`.`avg_sales` AS `avg_sales`,`customer`.`avg_coll` AS `avg_coll`,`customer`.`avg_days` AS `avg_days`,`customer`.`outstanding` AS `outstanding`,`customer`.`over_due` AS `over_due`,`customer`.`cuc_status` AS `cuc_status`,`customer`.`cud_eddate` AS `cud_eddate`,`customer`.`new_cucode` AS `new_cucode`,`customer`.`main_cucode` AS `main_cucode`,`customer`.`main_cucname` AS `main_cucname`,`customer`.`account_code` AS `account_code`,`customer`.`cuc_place` AS `cuc_place`,`customer`.`gst_number` AS `gst_number` from (((((`customer` join `branch` on(((`branch`.`ba_code` = `customer`.`ba_code`) and (`branch`.`company_code` = `customer`.`company_code`)))) join `company` on((`company`.`company_code` = `customer`.`company_code`))) join `territory` on(((`territory`.`tr_code` = `customer`.`tr_code`) and (`territory`.`company_code` = `customer`.`company_code`)))) join `route` on(((`route`.`ro_code` = `territory`.`ro_code`) and (`territory`.`company_code` = `route`.`company_code`)))) join `salesexecutive` on(((`salesexecutive`.`se_code` = `route`.`se_code`) and (`salesexecutive`.`company_code` = `route`.`company_code`))));
+CREATE OR REPLACE SQL SECURITY INVOKER VIEW `view_customer_list` AS select `company`.`coc_desc` AS `company_name`,`branch`.`brc_desc` AS `branch_name`,concat(`company`.`short_code`,' - ',`branch`.`brc_desc`) AS `company_branch`,concat(`company`.`short_code`,' - ',`branch`.`brc_alias`) AS `company_branch_code`,`territory`.`trc_desc` AS `terriotry_name`,`territory`.`ro_code` AS `ro_code`,`route`.`roc_desc` AS `route_name`,`route`.`se_code` AS `se_code`,`salesexecutive`.`sec_desc` AS `salesexecutive_name`,`customer`.`company_code` AS `company_code`,`customer`.`cu_code` AS `cu_code`,`customer`.`sa_code` AS `sa_code`,`customer`.`cuc_desc` AS `cuc_desc`,`customer`.`cuc_alias` AS `cuc_alias`,`customer`.`cuc_add1` AS `cuc_add1`,`customer`.`cuc_add2` AS `cuc_add2`,`customer`.`cuc_add3` AS `cuc_add3`,`customer`.`cuc_add4` AS `cuc_add4`,`customer`.`cuc_pincode` AS `cuc_pincode`,`customer`.`cuc_mobile` AS `cuc_mobile`,`customer`.`tr_code` AS `tr_code`,`customer`.`ba_code` AS `ba_code`,`customer`.`cun_creditlimit` AS `cun_creditlimit`,`customer`.`avg_sales` AS `avg_sales`,`customer`.`avg_coll` AS `avg_coll`,`customer`.`avg_days` AS `avg_days`,`customer`.`outstanding` AS `outstanding`,`customer`.`over_due` AS `over_due`,`customer`.`cuc_status` AS `cuc_status`,`customer`.`cud_eddate` AS `cud_eddate`,`customer`.`new_cucode` AS `new_cucode`,`customer`.`main_cucode` AS `main_cucode`,`customer`.`main_cucname` AS `main_cucname`,`customer`.`account_code` AS `account_code`,`customer`.`cuc_place` AS `cuc_place`,`customer`.`gst_number` AS `gst_number` from (((((`customer` join `branch` on(((`branch`.`ba_code` = `customer`.`ba_code`) and (`branch`.`company_code` = `customer`.`company_code`)))) join `company` on((`company`.`company_code` = `customer`.`company_code`))) join `territory` on(((`territory`.`tr_code` = `customer`.`tr_code`) and (`territory`.`company_code` = `customer`.`company_code`)))) join `route` on(((`route`.`ro_code` = `territory`.`ro_code`) and (`territory`.`company_code` = `route`.`company_code`)))) join `salesexecutive` on(((`salesexecutive`.`se_code` = `route`.`se_code`) and (`salesexecutive`.`company_code` = `route`.`company_code`))));
 
 -- sys_menufile rows
 INSERT IGNORE INTO `sys_menufile` (`menu_code`, `name`, `sort_order`, `status`) VALUES

@@ -389,7 +389,7 @@ CREATE TABLE IF NOT EXISTS salesdetails (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Branch picker list: 'BAD - CAL UNIT I' (company short code - branch name)
-CREATE OR REPLACE VIEW view_branch_list AS
+CREATE OR REPLACE SQL SECURITY INVOKER VIEW view_branch_list AS
 SELECT company.company_code, branch.ba_code,
        CONCAT(company.short_code, ' - ', branch.brc_desc) AS company_branch,
        CONCAT(company.short_code, ' - ', branch.brc_alias) AS company_branch_code,
@@ -397,7 +397,7 @@ SELECT company.company_code, branch.ba_code,
 FROM branch JOIN company ON company.company_code = branch.company_code;
 
 -- Customer search list with company, branch, territory, route and sales executive names
-CREATE OR REPLACE VIEW view_customer_list AS
+CREATE OR REPLACE SQL SECURITY INVOKER VIEW view_customer_list AS
 SELECT company.coc_desc AS company_name, branch.brc_desc AS branch_name,
        CONCAT(company.short_code, ' - ', branch.brc_desc) AS company_branch,
        CONCAT(company.short_code, ' - ', branch.brc_alias) AS company_branch_code,
