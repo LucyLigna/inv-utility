@@ -25,7 +25,8 @@ const BILL_FIELDS = `s.company_code, s.ba_code, s.sm_slno, s.smc_no, s.cu_code, 
   COALESCE(gc.cuc_desc, ${CUSTOMER_NAME}) AS group_name,
   COALESCE(gb.company_branch_code, gb.company_branch, b.company_branch_code, b.company_branch,
     CONCAT(s.company_code, ' - ', s.ba_code)) AS group_branch,
-  COALESCE(gc.cuc_place, c.cuc_place) AS group_place`;
+  COALESCE(gc.cuc_place, c.cuc_place) AS group_place,
+  NULLIF(TRIM(gm.remarks), '') AS group_remarks`; // remarks of the main customer in Trip Route Wise Customers
 // Two placeholders, both the sheet's trip_code
 const BILL_JOINS = `LEFT JOIN customer c ON c.company_code = ${CU_CO} AND c.ba_code = ${CU_BA} AND c.cu_code = s.cu_code
   LEFT JOIN view_branch_list b ON b.company_code = s.company_code AND b.ba_code = s.ba_code

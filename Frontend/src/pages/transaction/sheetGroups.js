@@ -10,7 +10,7 @@ export function byCustomer(bills) {
   for (const b of bills) {
     if (!groups.has(b.group_key)) {
       groups.set(b.group_key, {
-        key: b.group_key, name: b.group_name, company_branch: b.group_branch, place: b.group_place,
+        key: b.group_key, name: b.group_name, company_branch: b.group_branch, place: b.group_place, remarks: b.group_remarks || null,
         order: b.group_order, onRoute: b.route_order != null, bills: [], cases: 0, amount: 0,
       });
     }

@@ -79,7 +79,10 @@ function BranchSummary({ groups, allBills }) {
         {groups.map((g, i) => (
           <tr key={g.key} style={{ breakInside: 'avoid' }}>
             <td style={{ ...td, textAlign: 'center' }}>{i + 1}</td>
-            <td style={td}>{g.name}</td>
+            <td style={td}>
+              {g.name}
+              {g.remarks && <div style={{ fontSize: 11, fontStyle: 'italic', color: '#333' }}>{g.remarks}</div>}
+            </td>
             <td style={td}>{g.place}</td>
             {branches.map((br) => <td key={br} style={numTd}>{packs(g.bills, br) || ''}</td>)}
             <td style={{ ...numTd, fontWeight: 700 }}>{packs(g.bills)}</td>
@@ -132,7 +135,10 @@ function CustomerBills({ groups, allBills, contacts, qr }) {
               </colgroup>
               <thead>
                 <tr>
-                  <td style={{ ...info, fontSize: 13 }} colSpan={3}><b>{i + 1}. {g.name}</b></td>
+                  <td style={{ ...info, fontSize: 13 }} colSpan={3}>
+                    <b>{i + 1}. {g.name}</b>
+                    {g.remarks && <div style={{ fontSize: 11, fontStyle: 'italic', fontWeight: 400 }}>{g.remarks}</div>}
+                  </td>
                   <td style={info} colSpan={2}>Place: <b>{g.place || '—'}</b></td>
                 </tr>
                 <tr>
