@@ -4,7 +4,7 @@ import {
   Paper, Snackbar, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
 import {
-  DeleteOutline, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PersonAddAlt1, PlayArrow, Refresh, Save,
+  CallMerge, DeleteOutline, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PersonAddAlt1, PlayArrow, Refresh, Save,
   SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
@@ -61,6 +61,7 @@ export default function TripRouteCustomers() {
   const [subSearch, setSubSearch] = useState('');
   const [subResults, setSubResults] = useState([]);
   const [details, setDetails] = useState(null); // customer shown in the details pop-up
+  const [merging, setMerging] = useState(null); // { gi, into: group index or null }: the Merge pop-up
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(''); // message shown while the server is working (Process, adding, Save)
@@ -257,6 +258,18 @@ export default function TripRouteCustomers() {
   };
 
   const removeMain = (gi) => setGroups((g) => g.filter((_, i) => i !== gi));
+  // Merge: the main customer of group gi, with its sub customers, goes under the main customer of group "into"
+  // (at the end of its subs); they are then one group. Save keeps it.
+  const mergeGroups = (gi, into) => {
+    const from = groups[gi];
+    const target = groups[into];
+    setGroups((g) => g
+      .map((grp, i) => (i === into ? { ...grp, subs: [...grp.subs, { ...from.main, remarks: '' }, ...from.subs] } : grp))
+      .filter((_, i) => i !== gi));
+    setExpanded((s) => new Set(s).add(keyOf(target.main)));
+    setMerging(null);
+    setNotice(`${from.main.cuc_desc}${from.subs.length ? ` and its ${from.subs.length} sub customer${from.subs.length > 1 ? 's' : ''}` : ''} merged under ${target.main.cuc_desc}. Save to keep it.`);
+  };
   const removeSub = (gi, si) => setGroups((g) => g.map((grp, i) => (
     i === gi ? { ...grp, subs: grp.subs.filter((_, j) => j !== si) } : grp
   )));
@@ -345,7 +358,14 @@ export default function TripRouteCustomers() {
             />
           )}
         </TableCell>
-        <TableCell sx={{ ...cell, py: 0, width: isSub ? 48 : 84, whiteSpace: 'nowrap' }} align="center">
+        <TableCell sx={{ ...cell, py: 0, width: isSub ? 48 : 120, whiteSpace: 'nowrap' }} align="center">
+          {!isSub && groups.length > 1 && (
+            <Tooltip title="Merge with another main customer">
+              <IconButton size="small" aria-label="merge" onClick={() => setMerging({ gi, into: null })}>
+                <CallMerge fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           {!isSub && (
             <Tooltip title="Add sub customers">
               <IconButton size="small" aria-label="add sub customers" onClick={() => addSubsTo(gi)}>
@@ -652,6 +672,57 @@ export default function TripRouteCustomers() {
       </Dialog>
 
       {confirmDialog}
+      {/* Merge: pick the main customer to put this one (and its sub customers) under */}
+      <Dialog open={Boolean(merging)} onClose={() => setMerging(null)} maxWidth="sm" fullWidth>
+        {merging && groups[merging.gi] && (() => {
+          const from = groups[merging.gi];
+          const options = groups.map((g, i) => ({ g, i })).filter(({ i }) => i !== merging.gi);
+          const target = merging.into !== null ? groups[merging.into] : null;
+          return (
+            <>
+              <DialogTitle>Merge {from.main.cuc_desc}</DialogTitle>
+              <DialogContent>
+                <Typography variant="body2" mb={2}>
+                  <b>{from.main.cuc_desc}</b> ({from.main.company_branch}{from.main.cuc_place ? `, ${from.main.cuc_place}` : ''})
+                  {from.subs.length ? <> and its <b>{from.subs.length}</b> sub customer{from.subs.length > 1 ? 's' : ''}</> : null} will become
+                  sub customers of the main customer you choose. Save to keep it.
+                </Typography>
+                <Autocomplete
+                  options={options}
+                  value={options.find((o) => o.i === merging.into) || null}
+                  onChange={(e, o) => setMerging({ ...merging, into: o ? o.i : null })}
+                  getOptionLabel={(o) => o.g.main.cuc_desc}
+                  isOptionEqualToValue={(a, b) => a.i === b.i}
+                  renderOption={(props, o) => (
+                    <li {...props} key={keyOf(o.g.main)}>
+                      <Box>
+                        <b>{o.g.main.cuc_desc}</b>
+                        <Box sx={{ fontSize: 13, color: '#666' }}>
+                          {[o.g.main.cuc_place, o.g.main.company_branch].filter(Boolean).join(' · ')}
+                          {o.g.subs.length ? ` · ${o.g.subs.length} sub customer${o.g.subs.length > 1 ? 's' : ''}` : ''}
+                        </Box>
+                      </Box>
+                    </li>
+                  )}
+                  renderInput={(params) => <TextField {...params} autoFocus label="Merge into (main customer)" />}
+                />
+                {target && (
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    {target.main.cuc_desc} will have {target.subs.length + 1 + from.subs.length} sub customers.
+                    {from.main.remarks ? ` The remarks of ${from.main.cuc_desc} ("${from.main.remarks}") are dropped, as sub customers have none.` : ''}
+                  </Alert>
+                )}
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setMerging(null)}>Cancel</Button>
+                <Button variant="contained" startIcon={<CallMerge />} disabled={merging.into === null} onClick={() => mergeGroups(merging.gi, merging.into)}>
+                  Merge
+                </Button>
+              </DialogActions>
+            </>
+          );
+        })()}
+      </Dialog>
       {/* Processing: covers the screen while the server works, so nothing is clicked twice */}
       <Backdrop open={Boolean(busy)} sx={{ zIndex: (theme) => theme.zIndex.modal + 1, color: '#fff', flexDirection: 'column', gap: 2 }}>
         <CircularProgress color="inherit" />
