@@ -36,7 +36,7 @@ const STEP_ACTIONS = {
 
 // Logs successful changes (anything but GET) on a screen's API: who, which screen, what, which record
 const logActivity = (programCode, module) => (req, res, next) => {
-  if (req.method === 'GET') return next();
+  if (req.method === 'GET' || req.path.endsWith('/lock')) return next();
   let response = null;
   const json = res.json.bind(res);
   res.json = (body) => {

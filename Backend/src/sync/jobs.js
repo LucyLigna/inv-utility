@@ -5,7 +5,7 @@ const BASE_URL = process.env.INV_API_URL || 'http://192.168.3.24/INVUtility/Serv
 
 const DAILY = '0 6 * * *'; // 06:00 every day
 const EVERY_30_MIN = '*/30 * * * *';
-
+ 
 module.exports = {
   company: {
     url: `${BASE_URL}/company`,

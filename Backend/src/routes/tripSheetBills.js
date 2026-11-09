@@ -4,6 +4,20 @@ const {
   CUSTOMER_NAME, BILL_FIELDS, BILL_JOINS, findSheet, customerContacts, sheetBills,
 } = require('../db/sheetBills');
 const { codesFor, deliveries } = require('../db/delivery');
+const sheetLock = require('../db/sheetLock');
+
+// Changes to a sheet's bills only from the page that has it open (header X-Sheet-Lock: the page's lock id);
+// another page holding a live lock gets 409 with who has it
+async function needLock(req, res, next) {
+  try {
+    const holder = await sheetLock.otherHolder(req.params.tsCode, req.get('X-Sheet-Lock'));
+    if (!holder) return next();
+    const [[s]] = await pool.query('SELECT tsc_no FROM trip_sheet WHERE ts_code = ?', [req.params.tsCode]);
+    return res.status(409).json({ message: sheetLock.busyMessage(s ? s.tsc_no : 'This trip sheet', holder) });
+  } catch (err) {
+    return next(err);
+  }
+}
 
 const router = express.Router();
 
@@ -16,7 +30,8 @@ router.get('/sheets', async (req, res, next) => {
        FROM trip_sheet s JOIN trip_route r ON r.code = s.trip_code
        WHERE s.status = 'Active' ORDER BY s.ts_code DESC`
     );
-    res.json(rows);
+    const open = await sheetLock.openSheets();
+    res.json(rows.map((r) => ({ ...r, open_by: open[r.code] || null })));
   } catch (err) {
     next(err);
   }
@@ -113,7 +128,7 @@ router.get('/:tsCode/available', async (req, res, next) => {
 
 // Replaces the sheet's bills and updates its totals. Body: { bills: [{ company_code, ba_code, sm_slno }] },
 // in delivery order; each bill's position is kept as its sort_order
-router.put('/:tsCode', async (req, res, next) => {
+router.put('/:tsCode', needLock, async (req, res, next) => {
   const keys = (Array.isArray(req.body.bills) ? req.body.bills : [])
     .map((b) => [String(b.company_code || '').trim(), String(b.ba_code || '').trim(), String(b.sm_slno || '').trim()])
     .filter((k) => k.every(Boolean));
@@ -282,7 +297,7 @@ const billByKey = async (sheet, companyCode, baCode, slno) => {
   return bill;
 };
 
-router.post('/:tsCode/manual-bills', async (req, res, next) => {
+router.post('/:tsCode/manual-bills', needLock, async (req, res, next) => {
   const m = readManualBill(req.body);
   if (m.error) return res.status(400).json({ message: m.error });
   const { cust, smcNo, billDate, amount, packs } = m;
@@ -319,7 +334,7 @@ router.post('/:tsCode/manual-bills', async (req, res, next) => {
 
 // Edit a manual bill (same fields as adding), from the sheet it is on, or, when it is on no trip sheet, from any
 // sheet of a route it fits. A change of company - branch moves the bill (its key) on the trip sheets too.
-router.put('/:tsCode/manual-bills/:companyCode/:baCode/:slno', async (req, res, next) => {
+router.put('/:tsCode/manual-bills/:companyCode/:baCode/:slno', needLock, async (req, res, next) => {
   const m = readManualBill(req.body);
   if (m.error) return res.status(400).json({ message: m.error });
   const old = { company_code: req.params.companyCode, ba_code: req.params.baCode, slno: req.params.slno };
@@ -400,8 +415,34 @@ router.delete('/manual-bills/:companyCode/:baCode/:slno', async (req, res, next)
   }
 });
 
+// --- One page at a time ----------------------------------------------------------------------
+// Take or renew this page's lock on the sheet: { lockId }. 409 with who has it when another page does.
+router.post('/:tsCode/lock', async (req, res, next) => {
+  const lockId = String(req.body.lockId || '').slice(0, 40);
+  if (!lockId) return res.status(400).json({ message: 'lockId is required' });
+  try {
+    const [[s]] = await pool.query('SELECT tsc_no, status FROM trip_sheet WHERE ts_code = ?', [req.params.tsCode]);
+    if (!s) return res.status(404).json({ message: 'Trip sheet not found' });
+    const holder = await sheetLock.acquire(req.params.tsCode, lockId, req.user);
+    if (holder) return res.status(409).json({ message: sheetLock.busyMessage(s.tsc_no, holder), open_by: holder.username });
+    res.json({ locked: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Release this page's lock: { lockId } (also sent when the page closes)
+router.delete('/:tsCode/lock', async (req, res, next) => {
+  try {
+    await sheetLock.release(req.params.tsCode, req.body.lockId || req.get('X-Sheet-Lock'));
+    res.json({ released: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Mark the sheet's bills complete: from then on no bill can be added or removed (Save refuses)
-router.post('/:tsCode/complete', async (req, res, next) => {
+router.post('/:tsCode/complete', needLock, async (req, res, next) => {
   try {
     const [[sheet]] = await pool.query('SELECT tsc_no, status, bills_completed_at, total_bills FROM trip_sheet WHERE ts_code = ?', [req.params.tsCode]);
     if (!sheet) return res.status(404).json({ message: 'Trip sheet not found' });
@@ -419,7 +460,7 @@ router.post('/:tsCode/complete', async (req, res, next) => {
 });
 
 // Undo "complete" so bills can be changed again; administrators only
-router.post('/:tsCode/reopen-bills', async (req, res, next) => {
+router.post('/:tsCode/reopen-bills', needLock, async (req, res, next) => {
   if (!req.user.isAdmin) return res.status(403).json({ message: 'Only an administrator can reopen the bills of a completed trip sheet' });
   try {
     const [[sheet]] = await pool.query('SELECT tsc_no, status FROM trip_sheet WHERE ts_code = ?', [req.params.tsCode]);

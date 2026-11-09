@@ -1,5 +1,5 @@
 -- Creates the invutility database for Inventory Utility on a new MySQL 8 server.
--- Generated from the live database on 2026-11-05 by: npm run db:script
+-- Generated from the live database on 2026-11-09 by: npm run db:script
 -- Run it as a user that may create databases, e.g.:  mysql -u root -p < invutility-create.sql
 -- Safe to run again: existing tables and rows are left as they are.
 
@@ -380,6 +380,17 @@ CREATE TABLE IF NOT EXISTS `trip_sheet_delivery` (
   `accuracy_m` int DEFAULT NULL,
   PRIMARY KEY (`ts_code`,`company_code`,`ba_code`,`cu_code`),
   CONSTRAINT `fk_trip_sheet_delivery_sheet` FOREIGN KEY (`ts_code`) REFERENCES `trip_sheet` (`ts_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- trip_sheet_lock
+CREATE TABLE IF NOT EXISTS `trip_sheet_lock` (
+  `ts_code` int NOT NULL,
+  `lock_id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `user_code` int DEFAULT NULL,
+  `username` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `locked_at` datetime NOT NULL,
+  `seen_at` datetime NOT NULL,
+  PRIMARY KEY (`ts_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- vehiclenumber
