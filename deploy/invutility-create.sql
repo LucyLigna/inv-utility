@@ -92,6 +92,18 @@ CREATE TABLE IF NOT EXISTS `driver` (
   UNIQUE KEY `uq_driver_mobile` (`mobile`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- record_lock
+CREATE TABLE IF NOT EXISTS `record_lock` (
+  `lock_type` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `record_id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `lock_id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `user_code` int DEFAULT NULL,
+  `username` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `locked_at` datetime NOT NULL,
+  `seen_at` datetime NOT NULL,
+  PRIMARY KEY (`lock_type`,`record_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- route
 CREATE TABLE IF NOT EXISTS `route` (
   `company_code` varchar(3) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -380,17 +392,6 @@ CREATE TABLE IF NOT EXISTS `trip_sheet_delivery` (
   `accuracy_m` int DEFAULT NULL,
   PRIMARY KEY (`ts_code`,`company_code`,`ba_code`,`cu_code`),
   CONSTRAINT `fk_trip_sheet_delivery_sheet` FOREIGN KEY (`ts_code`) REFERENCES `trip_sheet` (`ts_code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- trip_sheet_lock
-CREATE TABLE IF NOT EXISTS `trip_sheet_lock` (
-  `ts_code` int NOT NULL,
-  `lock_id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `user_code` int DEFAULT NULL,
-  `username` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `locked_at` datetime NOT NULL,
-  `seen_at` datetime NOT NULL,
-  PRIMARY KEY (`ts_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- vehiclenumber

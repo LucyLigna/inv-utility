@@ -4,22 +4,19 @@ const {
   CUSTOMER_NAME, BILL_FIELDS, BILL_JOINS, findSheet, customerContacts, sheetBills,
 } = require('../db/sheetBills');
 const { codesFor, deliveries } = require('../db/delivery');
-const sheetLock = require('../db/sheetLock');
-
-// Changes to a sheet's bills only from the page that has it open (header X-Sheet-Lock: the page's lock id);
-// another page holding a live lock gets 409 with who has it
-async function needLock(req, res, next) {
-  try {
-    const holder = await sheetLock.otherHolder(req.params.tsCode, req.get('X-Sheet-Lock'));
-    if (!holder) return next();
-    const [[s]] = await pool.query('SELECT tsc_no FROM trip_sheet WHERE ts_code = ?', [req.params.tsCode]);
-    return res.status(409).json({ message: sheetLock.busyMessage(s ? s.tsc_no : 'This trip sheet', holder) });
-  } catch (err) {
-    return next(err);
-  }
-}
+const { lockRoutes, openRecords } = require('../db/recordLock');
 
 const router = express.Router();
+
+// One page at a time per trip sheet: POST/DELETE /:tsCode/lock, and changes only from the page holding it
+const needLock = lockRoutes(router, {
+  type: 'trip_sheet',
+  param: 'tsCode',
+  describe: async (code) => {
+    const [[s]] = await pool.query('SELECT tsc_no FROM trip_sheet WHERE ts_code = ?', [code]);
+    return s ? s.tsc_no : null;
+  },
+});
 
 // Active trip sheets for the picker, newest first
 router.get('/sheets', async (req, res, next) => {
@@ -30,7 +27,7 @@ router.get('/sheets', async (req, res, next) => {
        FROM trip_sheet s JOIN trip_route r ON r.code = s.trip_code
        WHERE s.status = 'Active' ORDER BY s.ts_code DESC`
     );
-    const open = await sheetLock.openSheets();
+    const open = await openRecords('trip_sheet');
     res.json(rows.map((r) => ({ ...r, open_by: open[r.code] || null })));
   } catch (err) {
     next(err);
@@ -410,32 +407,6 @@ router.delete('/manual-bills/:companyCode/:baCode/:slno', async (req, res, next)
     await pool.query('DELETE FROM trip_sheet_bills WHERE company_code = ? AND ba_code = ? AND sm_slno = ?', [companyCode, baCode, slno]);
     await pool.query('DELETE FROM salesdetails WHERE company_code = ? AND ba_code = ? AND sm_slno = ? AND is_manual = 1', [companyCode, baCode, slno]);
     res.json({ smc_no: bill.smc_no, deleted: true });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// --- One page at a time ----------------------------------------------------------------------
-// Take or renew this page's lock on the sheet: { lockId }. 409 with who has it when another page does.
-router.post('/:tsCode/lock', async (req, res, next) => {
-  const lockId = String(req.body.lockId || '').slice(0, 40);
-  if (!lockId) return res.status(400).json({ message: 'lockId is required' });
-  try {
-    const [[s]] = await pool.query('SELECT tsc_no, status FROM trip_sheet WHERE ts_code = ?', [req.params.tsCode]);
-    if (!s) return res.status(404).json({ message: 'Trip sheet not found' });
-    const holder = await sheetLock.acquire(req.params.tsCode, lockId, req.user);
-    if (holder) return res.status(409).json({ message: sheetLock.busyMessage(s.tsc_no, holder), open_by: holder.username });
-    res.json({ locked: true });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Release this page's lock: { lockId } (also sent when the page closes)
-router.delete('/:tsCode/lock', async (req, res, next) => {
-  try {
-    await sheetLock.release(req.params.tsCode, req.body.lockId || req.get('X-Sheet-Lock'));
-    res.json({ released: true });
   } catch (err) {
     next(err);
   }

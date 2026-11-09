@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert, Autocomplete, Backdrop, Box, Button, Chip, CircularProgress, IconButton, ListItemText, Menu, MenuItem, Paper, Snackbar, Table, TableBody, TableCell, TableContainer,
   TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
@@ -14,19 +14,8 @@ import MapToRouteDialog from './MapToRouteDialog';
 import ManualBillDialog from './ManualBillDialog';
 import { arrange, billKey, byCustomer, savedOrder } from './sheetGroups';
 import { useAuth } from '../../auth';
-import api, { errorMessage, getToken } from '../../api';
-
-// This page's own id for the sheet lock (one page at a time per trip sheet). Not crypto.randomUUID: that needs https.
-const newLockId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const LOCK_RENEW_MS = 30000;
-
-// Frees the sheet when the page goes away; keepalive lets the request finish while the page closes
-const releaseLock = (code, lockId) => fetch(`/api/trip-sheet-bills/${code}/lock`, {
-  method: 'DELETE',
-  keepalive: true,
-  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}`, 'X-Sheet-Lock': lockId },
-  body: JSON.stringify({ lockId }),
-}).catch(() => { /* it expires by itself */ });
+import api, { errorMessage } from '../../api';
+import useRecordLock from '../../components/useRecordLock';
 
 const BORDER = '1px solid #d5d8e0';
 const cell = { border: BORDER, px: 1.5, py: 0.75, fontSize: 14 };
@@ -128,51 +117,17 @@ export default function TripSheetBills() {
     }
   };
 
-  // One page at a time per trip sheet: Process takes the sheet's lock, it is renewed while the page is open, and
-  // released when another sheet is processed or the page closes. Every change carries the lock id (X-Sheet-Lock).
-  const lockId = useRef(newLockId());
-  const lockedCode = useRef(null);
-  useEffect(() => {
-    api.defaults.headers.common['X-Sheet-Lock'] = lockId.current;
-    const onUnload = () => { if (lockedCode.current) releaseLock(lockedCode.current, lockId.current); };
-    window.addEventListener('pagehide', onUnload);
-    return () => {
-      window.removeEventListener('pagehide', onUnload);
-      onUnload();
-      lockedCode.current = null;
-      delete api.defaults.headers.common['X-Sheet-Lock'];
-    };
-  }, []);
-  // Takes the lock; false (with the message shown) when another page has the sheet open
+  // One page at a time per trip sheet (see useRecordLock): Process takes the sheet; if another page takes it
+  // over (e.g. this PC slept), the sheet is closed here and the user told why
+  const { take: takeSheetLock, lockedCode } = useRecordLock('/trip-sheet-bills', sheet?.code ?? null, (message) => {
+    setSheet(null);
+    setError(`${message} Your unsaved changes on this page were not saved.`);
+  });
   const takeLock = async (s) => {
-    try {
-      await api.post(`/trip-sheet-bills/${s.code}/lock`, { lockId: lockId.current });
-    } catch (err) {
-      if (err.response?.status === 403) return true; // no right to change bills: viewing only, no lock needed
-      setError(errorMessage(err));
-      return false;
-    }
-    if (lockedCode.current && lockedCode.current !== s.code) releaseLock(lockedCode.current, lockId.current);
-    lockedCode.current = s.code;
-    return true;
+    const result = await takeSheetLock(s.code);
+    if (!result.ok) setError(result.message);
+    return result.ok;
   };
-  // Keep the lock while the sheet is open here; if it was lost (e.g. the PC slept and another page took the
-  // sheet), say so and close the sheet on this page
-  useEffect(() => {
-    if (!sheet) return undefined;
-    const timer = setInterval(async () => {
-      try {
-        await api.post(`/trip-sheet-bills/${sheet.code}/lock`, { lockId: lockId.current });
-      } catch (err) {
-        if (err.response?.status === 409) {
-          lockedCode.current = null;
-          setSheet(null);
-          setError(`${errorMessage(err)} Your unsaved changes on this page were not saved.`);
-        }
-      }
-    }, LOCK_RENEW_MS);
-    return () => clearInterval(timer);
-  }, [sheet?.code]);
 
   const loadSheets = () => api.get('/trip-sheet-bills/sheets')
     .then(({ data }) => setSheets(data))

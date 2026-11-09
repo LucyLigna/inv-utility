@@ -10,6 +10,7 @@ import {
 import ActionBar from '../../components/ActionBar';
 import { useConfirm } from '../../components/ConfirmDialog';
 import api, { errorMessage } from '../../api';
+import useRecordLock from '../../components/useRecordLock';
 
 const BLUE = '#1a35b0';
 const BORDER = '1px solid #d5d8e0';
@@ -89,10 +90,30 @@ export default function TripRouteCustomers() {
     confirmLabel: 'Discard',
   });
 
+  // One page at a time per trip route (see useRecordLock): Process takes the route; if another page takes it over
+  // (e.g. this PC slept), the route is closed here and the user told why
+  const { take: takeRouteLock, lockedCode } = useRecordLock('/trip-route-customers', loaded?.route.code ?? null, (message) => {
+    setLoaded(null);
+    setGroups([]);
+    setError(`${message} Your unsaved changes on this page were not saved.`);
+  });
+  const [openRoutes, setOpenRoutes] = useState({}); // routes open on other pages: { code: username }
+  const loadOpenRoutes = () => api.get('/trip-route-customers/open').then(({ data }) => setOpenRoutes(data)).catch(() => {});
+  useEffect(() => { loadOpenRoutes(); }, []);
+
   const process = async (r = route) => {
     if (!r || !(await confirmDiscard())) return;
     try {
-      const { data } = await run(`Loading the customers of ${r.name}…`, () => api.get(`/trip-route-customers/${r.code}`));
+      const { data } = await run(`Loading the customers of ${r.name}…`, async () => {
+        const lock = await takeRouteLock(r.code);
+        if (!lock.ok) {
+          setError(lock.message);
+          return {};
+        }
+        return api.get(`/trip-route-customers/${r.code}`);
+      });
+      loadOpenRoutes();
+      if (!data) return; // another page has the route open (the message is shown)
       const g = toGroups(data.customers);
       setLoaded({ route: data.route, branches: data.branches });
       setGroups(g);
@@ -364,6 +385,17 @@ export default function TripRouteCustomers() {
             onChange={(e, value) => setRoute(value)}
             getOptionLabel={(r) => `${r.name} (${r.short_code})`}
             isOptionEqualToValue={(a, b) => a.code === b.code}
+            onOpen={loadOpenRoutes}
+            renderOption={(props, r) => (
+              <li {...props} key={r.code}>
+                <Box>
+                  {r.name} ({r.short_code})
+                  {openRoutes[r.code] && r.code !== lockedCode.current && (
+                    <Box component="span" sx={{ ml: 1, color: '#c77700', fontSize: 13 }}>· open by {openRoutes[r.code]}</Box>
+                  )}
+                </Box>
+              </li>
+            )}
             sx={{ width: 380 }}
             renderInput={(params) => <TextField {...params} label="Trip Route" placeholder="Select a route" />}
           />

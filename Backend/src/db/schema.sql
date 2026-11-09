@@ -147,15 +147,18 @@ CREATE TABLE IF NOT EXISTS trip_sheet_delivery (
   CONSTRAINT fk_trip_sheet_delivery_sheet FOREIGN KEY (ts_code) REFERENCES trip_sheet (ts_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Which page is working on a trip sheet in Trip Sheet - Bill Details (one page at a time). A row not renewed
+-- One page at a time per record: which page has e.g. a trip sheet open in Trip Sheet - Bill Details
+-- (lock_type 'trip_sheet') or a trip route in Trip Route Wise Customers ('trip_route'). A row not renewed
 -- (seen_at) for a few minutes is free again.
-CREATE TABLE IF NOT EXISTS trip_sheet_lock (
-  ts_code    INT          NOT NULL PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS record_lock (
+  lock_type  VARCHAR(30)  NOT NULL,
+  record_id  VARCHAR(40)  NOT NULL, -- the record's code
   lock_id    VARCHAR(40)  NOT NULL, -- the page's own id
   user_code  INT          DEFAULT NULL,
   username   VARCHAR(50)  DEFAULT NULL,
   locked_at  DATETIME     NOT NULL,
-  seen_at    DATETIME     NOT NULL
+  seen_at    DATETIME     NOT NULL,
+  PRIMARY KEY (lock_type, record_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Bills (from salesdetails) carried on a trip sheet. A bill can be on only one trip sheet that isn't Cancelled.

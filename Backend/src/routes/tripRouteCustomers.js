@@ -2,6 +2,28 @@ const express = require('express');
 const pool = require('../config/db');
 
 const router = express.Router();
+const { lockRoutes, openRecords } = require('../db/recordLock');
+
+// One page at a time per trip route: POST/DELETE /:tripCode/lock; saving the route's customers, and mapping a
+// customer to it from Trip Sheet - Bill Details, only when no other page has the route open here
+const needLock = lockRoutes(router, {
+  type: 'trip_route',
+  param: 'tripCode',
+  screen: 'Trip Route Wise Customers',
+  describe: async (code) => {
+    const [[route]] = await pool.query('SELECT name FROM trip_route WHERE code = ?', [code]);
+    return route ? route.name : null;
+  },
+});
+
+// Routes open on some page right now: { code: username }
+router.get('/open', async (req, res, next) => {
+  try {
+    res.json(await openRecords('trip_route'));
+  } catch (err) {
+    next(err);
+  }
+});
 const SEARCH_LIMIT = 200;
 
 // Fields the screen shows for a customer, from view_customer_list (alias v)
@@ -184,7 +206,7 @@ router.get('/:tripCode/map-options', async (req, res, next) => {
 //   subs:  [{ company_code, ba_code, cu_code }] customers to add as its sub customers (e.g. same GST number)
 //   under: an existing main customer ({ company_code, ba_code, cu_code }) to add everything beneath as sub customers
 //          (at the end of that group), or null to add the customer as a new main customer at the end of the route.
-router.post('/:tripCode/map', async (req, res, next) => {
+router.post('/:tripCode/map', needLock, async (req, res, next) => {
   const clean = (c) => ({
     company_code: String(c?.company_code || '').trim(),
     ba_code: String(c?.ba_code || '').trim(),
@@ -253,7 +275,7 @@ router.post('/:tripCode/map', async (req, res, next) => {
 
 // Replaces the route's customer list, in order.
 // Body: { customers: [{ company_code, ba_code, cu_code, main_sub, remarks }] }; remarks are kept for main customers only
-router.put('/:tripCode', async (req, res, next) => {
+router.put('/:tripCode', needLock, async (req, res, next) => {
   const list = Array.isArray(req.body.customers) ? req.body.customers : [];
   const customers = list.map((c) => {
     const mainSub = c.main_sub === 'Sub' ? 'Sub' : 'Main';
