@@ -10,6 +10,8 @@ import { StatusCell } from '../../components/ListTable';
 import api, { errorMessage } from '../../api';
 import { useAuth } from '../../auth';
 
+const BILL_MARKING = 'P0204'; // Branch Wise Bill Marking: needs the user's branches
+
 // '2026-11-04 10:15' -> '04-11-2026 10:15'
 const showDateTime = (d) => (d ? `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)} ${d.slice(11)}` : '');
 
@@ -39,7 +41,10 @@ function RightsPicker({ form, setForm, readOnly }) {
   });
 
   return (
-    <FormSection title="Rights *" hint="Tick the screens this user may use (at least one for an active user). Untick a screen to hide it from the user.">
+    <FormSection
+      title="Rights *"
+      hint="Tick the screens this user may use (at least one for an active user). Untick a screen to hide it from the user. Branch Wise Bill Marking also needs the user's branches."
+    >
       {error && <Alert severity="error">{error}</Alert>}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
         {modules.map(([menuCode, menuName]) => {
@@ -55,13 +60,16 @@ function RightsPicker({ form, setForm, readOnly }) {
                 )}
               </Box>
               {list.map((p) => (
-                <FormControlLabel
-                  key={p.program_code}
-                  sx={{ display: 'flex' }}
-                  disabled={readOnly}
-                  label={p.name}
-                  control={<Checkbox size="small" checked={has(p.program_code)} onChange={() => toggle(p.program_code)} />}
-                />
+                <Box key={p.program_code} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <FormControlLabel
+                    sx={{ mr: 0, flexShrink: 0 }}
+                    disabled={readOnly}
+                    label={p.name}
+                    control={<Checkbox size="small" checked={has(p.program_code)} onChange={() => toggle(p.program_code)} />}
+                  />
+                  {/* Branch Wise Bill Marking: the user's branches, chosen in a pop-up */}
+                  {p.program_code === BILL_MARKING && <BranchPicker form={form} setForm={setForm} readOnly={readOnly} />}
+                </Box>
               ))}
             </Box>
           );
@@ -74,8 +82,6 @@ function RightsPicker({ form, setForm, readOnly }) {
 // Branches for a 'User' (Branch Wise Bill Marking shows bills of these branches); administrators have all.
 // The form shows the selected branches' codes; they are chosen in a pop-up, which also opens by itself when
 // Branch Wise Bill Marking is ticked under Rights.
-const BILL_MARKING = 'P0204';
-
 function BranchPicker({ form, setForm, readOnly }) {
   const [branches, setBranches] = useState([]);
   const [error, setError] = useState('');
@@ -112,21 +118,19 @@ function BranchPicker({ form, setForm, readOnly }) {
   const toggle = (k) => setDraft((d) => (d.includes(k) ? d.filter((x) => x !== k) : [...d, k]));
   const allShown = shown.length > 0 && shown.every((x) => has(keyOf(x)));
 
+  if (!hasMarking) return null;
   return (
-    <FormSection
-      title={hasMarking ? 'Branches *' : 'Branches'}
-      hint="Branches whose bills this user works on in Branch Wise Bill Marking (at least one when that screen is ticked)."
-    >
-      {error && <Alert severity="error">{error}</Alert>}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+    <Box sx={{ display: 'contents' }}>
+      {error && <Typography variant="body2" color="error">{error}</Typography>}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
         {selected.map((x) => (
           <Tooltip key={keyOf(x)} title={x.company_branch}>
             <Chip size="small" label={x.company_branch_code} />
           </Tooltip>
         ))}
-        {!selected.length && <Typography variant="body2" color="text.secondary">No branch selected</Typography>}
+        {!selected.length && <Typography variant="body2" color="error">Select at least one branch</Typography>}
         {!readOnly && (
-          <Button size="small" variant="outlined" startIcon={<AccountTree />} onClick={openPicker} sx={{ ml: 0.5 }}>
+          <Button size="small" variant="outlined" startIcon={<AccountTree />} onClick={openPicker} sx={{ py: 0 }}>
             {selected.length ? 'Change branches' : 'Select branches'}
           </Button>
         )}
@@ -163,7 +167,7 @@ function BranchPicker({ form, setForm, readOnly }) {
           <Button variant="contained" onClick={() => { setForm((f) => ({ ...f, branches: draft })); setOpen(false); }}>OK</Button>
         </DialogActions>
       </Dialog>
-    </FormSection>
+    </Box>
   );
 }
 
@@ -237,12 +241,7 @@ const makeConfig = (me) => ({
     }
     return null;
   },
-  renderExtra: (props) => (
-    <>
-      <RightsPicker {...props} />
-      <BranchPicker {...props} />
-    </>
-  ),
+  renderExtra: (props) => <RightsPicker {...props} />,
   actions: [{
     label: 'Expire Password',
     icon: <LockReset />,
