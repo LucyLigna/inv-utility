@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert, Autocomplete, Box, Button, Chip, IconButton, ListItemText, Menu, MenuItem, Paper, Snackbar, Table, TableBody, TableCell, TableContainer,
+  Alert, Autocomplete, Backdrop, Box, Button, Chip, CircularProgress, IconButton, ListItemText, Menu, MenuItem, Paper, Snackbar, Table, TableBody, TableCell, TableContainer,
   TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import {
@@ -68,6 +68,15 @@ export default function TripSheetBills() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [syncing, setSyncing] = useState(false);
+  const [busy, setBusy] = useState(''); // message shown while the server works (Process, Save, Complete, print...)
+  const run = async (message, work) => {
+    setBusy(message);
+    try {
+      return await work();
+    } finally {
+      setBusy('');
+    }
+  };
   const [reloadKey, setReloadKey] = useState(0); // bump to reload the bills list
   const [printMenu, setPrintMenu] = useState(null); // element the print-format menu opens from
   const [printFormat, setPrintFormat] = useState('branch');
@@ -127,7 +136,7 @@ export default function TripSheetBills() {
       confirmLabel: 'Discard',
     }))) return;
     try {
-      const { data } = await api.get(`/trip-sheet-bills/${s.code}`);
+      const { data } = await run(`Loading ${s.tsc_no}…`, () => api.get(`/trip-sheet-bills/${s.code}`));
       const map = new Map(data.bills.map((b) => [billKey(b), b]));
       // Bills come in their saved order; keep the customers in that order if it was saved
       const order = savedOrder(data.bills);
@@ -173,7 +182,10 @@ export default function TripSheetBills() {
     const summary = [];
     try {
       for (const [job, label] of [['customer', 'customers'], ['salesdetails', 'bills']]) {
-        const { data } = await api.post(`/sync/${job}/run`);
+        const { data } = await run(
+          `Getting the latest ${label} from INV… This can take a few minutes.`,
+          () => api.post(`/sync/${job}/run`),
+        );
         if (data.skipped) summary.push(`${label}: already being fetched by the scheduler`);
         else if (data.status === 'Failed') summary.push(`${label}: failed (${data.message || 'see the sync log'})`);
         else summary.push(`${data.saved} ${label} received`);
@@ -239,7 +251,7 @@ export default function TripSheetBills() {
     });
     if (!ok) return;
     try {
-      await api.delete(`/trip-sheet-bills/manual-bills/${b.company_code}/${b.ba_code}/${b.sm_slno}`);
+      await run(`Deleting manual bill ${b.smc_no}…`, () => api.delete(`/trip-sheet-bills/manual-bills/${b.company_code}/${b.ba_code}/${b.sm_slno}`));
       setNotice(`Manual bill ${b.smc_no} deleted`);
       setReloadKey((k) => k + 1);
     } catch (err) {
@@ -250,7 +262,7 @@ export default function TripSheetBills() {
   const save = async () => {
     try {
       const bills = groups.flatMap((g) => g.bills).map(({ company_code, ba_code, sm_slno }) => ({ company_code, ba_code, sm_slno }));
-      const { data } = await api.put(`/trip-sheet-bills/${sheet.code}`, { bills });
+      const { data } = await run('Saving…', () => api.put(`/trip-sheet-bills/${sheet.code}`, { bills }));
       setSavedKey(snapshot(selected, customOrder));
       setSheet({ ...sheet, total_bills: data.total_bills, total_pack_qty: data.total_pack_qty });
       setNotice(`Saved ${data.total_bills} bills (${data.total_pack_qty} cases) on ${sheet.tsc_no}`);
@@ -272,7 +284,7 @@ export default function TripSheetBills() {
     });
     if (!ok || (dirty && !(await save()))) return;
     try {
-      const { data } = await api.post(`/trip-sheet-bills/${sheet.code}/complete`);
+      const { data } = await run(`Marking ${sheet.tsc_no} complete…`, () => api.post(`/trip-sheet-bills/${sheet.code}/complete`));
       setSheet(data.sheet);
       setNotice(`${sheet.tsc_no} marked complete`);
     } catch (err) {
@@ -290,7 +302,7 @@ export default function TripSheetBills() {
     });
     if (!ok) return;
     try {
-      const { data } = await api.post(`/trip-sheet-bills/${sheet.code}/reopen-bills`);
+      const { data } = await run(`Reopening the bills of ${sheet.tsc_no}…`, () => api.post(`/trip-sheet-bills/${sheet.code}/reopen-bills`));
       setSheet(data.sheet);
       setNotice(`Bills of ${sheet.tsc_no} reopened`);
     } catch (err) {
@@ -313,15 +325,17 @@ export default function TripSheetBills() {
     }
     if (format === 'customer') {
       try {
-        const { data } = await api.get(`/trip-sheet-bills/${sheet.code}`);
-        setContacts(data.customers || {});
-        // qrcode is a CommonJS package: its functions come on the default export
-        const qrcode = await import('qrcode');
-        const { toDataURL } = qrcode.default || qrcode;
-        const images = await Promise.all(Object.entries(data.codes || {}).map(async ([key, c]) => (
-          [key, { code: c.code, image: await toDataURL(c.qr, { margin: 0, width: 240, errorCorrectionLevel: 'M' }) }]
-        )));
-        setQr(Object.fromEntries(images));
+        await run('Preparing the print (customer details and QR codes)…', async () => {
+          const { data } = await api.get(`/trip-sheet-bills/${sheet.code}`);
+          setContacts(data.customers || {});
+          // qrcode is a CommonJS package: its functions come on the default export
+          const qrcode = await import('qrcode');
+          const { toDataURL } = qrcode.default || qrcode;
+          const images = await Promise.all(Object.entries(data.codes || {}).map(async ([key, c]) => (
+            [key, { code: c.code, image: await toDataURL(c.qr, { margin: 0, width: 240, errorCorrectionLevel: 'M' }) }]
+          )));
+          setQr(Object.fromEntries(images));
+        });
       } catch (err) {
         setError(errorMessage(err));
         return;
@@ -376,17 +390,17 @@ export default function TripSheetBills() {
     <Box>
       <ActionBar
         left={[
-          { label: 'Save', icon: <Save />, onClick: save, disabled: !dirty || complete },
+          { label: busy === 'Saving…' ? 'Saving…' : 'Save', icon: <Save />, onClick: save, disabled: !dirty || complete || Boolean(busy) },
           complete
-            ? { label: 'Reopen Bills', icon: <LockOpenOutlined />, onClick: reopenBills, disabled: !user.isAdmin }
-            : { label: 'Mark Complete', icon: <TaskAlt />, onClick: markComplete, disabled: !sheet || !groups.length },
-          { label: 'Refresh', icon: <Refresh />, onClick: () => process(sheet), disabled: !sheet },
-          { label: 'Print', icon: <Print />, onClick: (e) => setPrintMenu(e.currentTarget), disabled: !sheet || !groups.length },
+            ? { label: 'Reopen Bills', icon: <LockOpenOutlined />, onClick: reopenBills, disabled: !user.isAdmin || Boolean(busy) }
+            : { label: 'Mark Complete', icon: <TaskAlt />, onClick: markComplete, disabled: !sheet || !groups.length || Boolean(busy) },
+          { label: 'Refresh', icon: <Refresh />, onClick: () => process(sheet), disabled: !sheet || Boolean(busy) },
+          { label: 'Print', icon: <Print />, onClick: (e) => setPrintMenu(e.currentTarget), disabled: !sheet || !groups.length || Boolean(busy) },
           {
             label: syncing ? 'Getting latest bills…' : 'Get Latest Bills',
             icon: <CloudDownload />,
             onClick: getLatestBills,
-            disabled: syncing,
+            disabled: syncing || Boolean(busy),
           },
         ]}
         right={[
@@ -408,8 +422,11 @@ export default function TripSheetBills() {
               sx={{ width: 460 }}
               renderInput={(params) => <TextField {...params} label="Trip Sheet" placeholder="Select a trip sheet" />}
             />
-            <Button variant="contained" size="large" startIcon={<PlayArrow />} disabled={!picked} onClick={() => process()}>
-              Process
+            <Button
+              variant="contained" size="large" disabled={!picked || Boolean(busy)} onClick={() => process()}
+              startIcon={busy.startsWith('Loading') ? <CircularProgress size={18} color="inherit" /> : <PlayArrow />}
+            >
+              {busy.startsWith('Loading') ? 'Processing…' : 'Process'}
             </Button>
           </Paper>
           {/* The processed sheet and its saved totals */}
@@ -727,6 +744,11 @@ export default function TripSheetBills() {
         )}
       </Box>
       {confirmDialog}
+      {/* Processing: covers the screen while the server works, so nothing is clicked twice */}
+      <Backdrop open={Boolean(busy)} sx={{ zIndex: (theme) => theme.zIndex.modal + 1, color: '#fff', flexDirection: 'column', gap: 2 }}>
+        <CircularProgress color="inherit" />
+        <Typography sx={{ fontWeight: 600, textAlign: 'center', px: 2 }}>{busy}</Typography>
+      </Backdrop>
       <ManualBillDialog sheet={sheet} open={manualOpen && Boolean(sheet)} onClose={() => setManualOpen(false)} onAdded={manualAdded} />
       <ManualBillDialog
         sheet={sheet} open={Boolean(editingBill) && Boolean(sheet)} bill={editingBill}
