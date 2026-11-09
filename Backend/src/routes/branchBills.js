@@ -49,7 +49,16 @@ router.get('/sheets', async (req, res, next) => {
        ORDER BY s.ts_code DESC`,
       [company, branch]
     );
-    res.json(rows);
+    // Each sheet's customer order (Trip Route Wise Customers of its route): { 'company|branch|customer': position }
+    const tripCodes = [...new Set(rows.map((r) => r.trip_code))];
+    const [order] = tripCodes.length
+      ? await pool.query('SELECT trip_code, company_code, ba_code, cu_code, sort_order FROM trip_route_customers WHERE trip_code IN (?)', [tripCodes])
+      : [[]];
+    res.json(rows.map((r) => ({
+      ...r,
+      customer_order: Object.fromEntries(order.filter((o) => o.trip_code === r.trip_code)
+        .map((o) => [`${o.company_code}|${o.ba_code}|${o.cu_code}`, o.sort_order])),
+    })));
   } catch (err) {
     next(err);
   }
@@ -67,7 +76,7 @@ router.get('/bills', async (req, res, next) => {
     if (!mayUse(await userBranches(req.user), company, branch)) return res.status(403).json({ message: 'This branch is not given to you' });
     const [rows] = await pool.query(
       `SELECT s.company_code, s.ba_code, s.sm_slno, s.smc_no, DATE_FORMAT(COALESCE(s.smd_date, DATE(s.inp_dt_tm)), '%Y-%m-%d') AS bill_date,
-         s.cu_code, ${CUSTOMER_NAME} AS cuc_desc, c.cuc_place, s.net_amount, s.pack_qty, s.tpc_desc, s.transporter_type, s.is_manual,
+         s.cu_code, ${CU_CO} AS cust_company_code, ${CU_BA} AS cust_ba_code, ${CUSTOMER_NAME} AS cuc_desc, c.cuc_place, s.net_amount, s.pack_qty, s.tpc_desc, s.transporter_type, s.is_manual,
          ts.ts_code AS sheet_code, ts.tsc_no AS sheet_no, ts.status AS sheet_status, ts.bills_completed_at IS NOT NULL AS sheet_complete,
          (SELECT GROUP_CONCAT(x.ts_code ORDER BY x.ts_code DESC)
             FROM trip_route_customers t

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Alert, Backdrop, Box, Checkbox, CircularProgress, MenuItem, Paper, Snackbar, Table, TableBody, TableCell, TableContainer,
+  Alert, Backdrop, Box, Button, Checkbox, IconButton, CircularProgress, MenuItem, Paper, Snackbar, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
-import { LockOutlined, Refresh, Save } from '@mui/icons-material';
+import {
+  KeyboardArrowDown, KeyboardArrowRight, LockOutlined, Refresh, Save, UnfoldLess, UnfoldMore,
+} from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
 import { useConfirm } from '../../components/ConfirmDialog';
 import api, { errorMessage } from '../../api';
@@ -41,6 +43,13 @@ export default function BranchBillMarking() {
   const [busy, setBusy] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [confirm, confirmDialog] = useConfirm();
+  const [collapsed, setCollapsed] = useState(new Set()); // tree rows closed on the right ('s:<sheet>', 'c:<sheet>:<customer>')
+  const toggleRow = (key) => setCollapsed((s) => {
+    const next = new Set(s);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
 
   const run = async (message, work) => {
     setBusy(message);
@@ -144,15 +153,29 @@ export default function BranchBillMarking() {
       if (code == null || code === '') return;
       if (!bySheet.has(code)) bySheet.set(code, { code, customers: new Map(), bills: 0, cases: 0, amount: 0 });
       const s = bySheet.get(code);
-      const ck = `${b.company_code}|${b.cu_code}`;
-      if (!s.customers.has(ck)) s.customers.set(ck, { name: b.cuc_desc, place: b.cuc_place, bills: [] });
-      s.customers.get(ck).bills.push(b);
+      const ck = `${b.cust_company_code}|${b.cust_ba_code}|${b.cu_code}`;
+      if (!s.customers.has(ck)) s.customers.set(ck, { key: ck, name: b.cuc_desc, place: b.cuc_place, bills: [], cases: 0, amount: 0 });
+      const c = s.customers.get(ck);
+      c.bills.push(b);
+      c.cases += Number(b.pack_qty) || 0;
+      c.amount += Number(b.net_amount) || 0;
+      if (b.net_amount != null) c.hasAmount = true;
       s.bills += 1;
       s.cases += Number(b.pack_qty) || 0;
       s.amount += Number(b.net_amount) || 0;
+      if (b.net_amount != null) s.hasAmount = true;
     });
-    return [...bySheet.values()];
-  }, [bills, marks]);
+    // Customers in the order of Trip Route Wise Customers of the sheet's route; ones not on it last, by name
+    return [...bySheet.values()].map((s) => {
+      const order = sheetByCode.get(s.code)?.customer_order || {};
+      const rank = (c) => (order[c.key] ?? Number.MAX_SAFE_INTEGER);
+      const customers = [...s.customers.values()].sort((a, b) => rank(a) - rank(b) || String(a.name).localeCompare(String(b.name)));
+      customers.forEach((c) => c.bills.sort((a, b) => String(a.smc_no).localeCompare(String(b.smc_no))));
+      return { ...s, customers };
+    });
+  }, [bills, marks, sheetByCode]);
+  const treeKeys = tree.flatMap((s) => [`s:${s.code}`, ...s.customers.map((c) => `c:${s.code}:${c.key}`)]);
+  const allOpen = collapsed.size === 0;
 
   if (branches && !branches.length) {
     return (
@@ -288,43 +311,92 @@ export default function BranchBillMarking() {
             </Typography>
           </Paper>
 
-          {/* Right: what is marked, by trip sheet and customer */}
-          <Paper variant="outlined" sx={{ p: 1.5, maxHeight: 'calc(100vh - 260px)', overflow: 'auto' }}>
-            <Typography sx={{ fontWeight: 700, mb: 1 }}>Trip sheets</Typography>
-            {!tree.length && <Typography variant="body2" color="text.secondary">Tick bills on the left to put them on a trip sheet.</Typography>}
-            {tree.map((s) => (
-              <Box key={s.code} sx={{ mb: 2 }}>
-                <Box sx={{ bgcolor: '#e8eefb', px: 1.25, py: 0.75, borderRadius: 1, display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                  <b>{sheetName(s.code, bills.find((b) => b.sheet_code === s.code))}</b>
-                  <Box component="span" sx={{ fontSize: 13, color: '#444', whiteSpace: 'nowrap' }}>{s.bills} bills · {s.cases} cases</Box>
-                </Box>
-                {[...s.customers.values()].map((c) => (
-                  <Box key={c.name + c.place} sx={{ pl: 1.5, mt: 0.75 }}>
-                    <Typography sx={{ fontWeight: 600, fontSize: 14 }}>
-                      {c.name}{c.place && <Box component="span" sx={{ color: '#777', fontWeight: 400 }}> · {c.place}</Box>}
-                    </Typography>
-                    <Table size="small" sx={{ borderCollapse: 'collapse', mt: 0.25 }}>
-                      <TableHead>
-                        <TableRow>
-                          <TableCell sx={{ ...head, py: 0.25, fontSize: 12 }}>Bill #</TableCell>
-                          <TableCell sx={{ ...head, py: 0.25, fontSize: 12, textAlign: 'right' }}>Amount</TableCell>
-                          <TableCell sx={{ ...head, py: 0.25, fontSize: 12, textAlign: 'right' }}>Number of cases</TableCell>
+          {/* Right: what is marked, as a tree: trip sheet > customer (route order) > bills */}
+          <Paper variant="outlined" sx={{ p: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+              <Typography sx={{ fontWeight: 700 }}>Trip sheets</Typography>
+              {tree.length > 0 && (
+                <Button
+                  size="small" startIcon={allOpen ? <UnfoldLess /> : <UnfoldMore />}
+                  onClick={() => setCollapsed(allOpen ? new Set(treeKeys) : new Set())}
+                >
+                  {allOpen ? 'Collapse all' : 'Expand all'}
+                </Button>
+              )}
+            </Box>
+            {!tree.length ? (
+              <Typography variant="body2" color="text.secondary">Tick bills on the left to put them on a trip sheet.</Typography>
+            ) : (
+              <TableContainer sx={{ maxHeight: 'calc(100vh - 320px)' }}>
+                <Table stickyHeader size="small" sx={{ borderCollapse: 'collapse' }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={head}>Trip sheet / Customer / Bill #</TableCell>
+                      <TableCell sx={{ ...head, textAlign: 'right' }}>Amount</TableCell>
+                      <TableCell sx={{ ...head, textAlign: 'right' }}>Number of cases</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {tree.flatMap((s) => {
+                      const sk = `s:${s.code}`;
+                      const sOpen = !collapsed.has(sk);
+                      const rows = [(
+                        <TableRow key={sk} sx={{ bgcolor: '#e8eefb' }}>
+                          <TableCell sx={{ ...cell, fontWeight: 700 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <IconButton size="small" sx={{ p: 0.25 }} onClick={() => toggleRow(sk)} aria-label={sOpen ? 'collapse' : 'expand'}>
+                                {sOpen ? <KeyboardArrowDown fontSize="small" /> : <KeyboardArrowRight fontSize="small" />}
+                              </IconButton>
+                              {sheetName(s.code, bills.find((x) => x.sheet_code === s.code))}
+                              <Box component="span" sx={{ ml: 'auto', fontWeight: 400, fontSize: 12, color: '#555', whiteSpace: 'nowrap' }}>
+                                {s.customers.length} customer{s.customers.length === 1 ? '' : 's'} · {s.bills} bill{s.bills === 1 ? '' : 's'}
+                              </Box>
+                            </Box>
+                          </TableCell>
+                          <TableCell sx={{ ...num, fontWeight: 700 }}>{money(s.hasAmount ? s.amount : null)}</TableCell>
+                          <TableCell sx={{ ...num, fontWeight: 700 }}>{s.cases}</TableCell>
                         </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {c.bills.map((b) => (
-                          <TableRow key={billKey(b)} sx={{ bgcolor: (marks[billKey(b)] ?? null) !== (saved[billKey(b)] ?? null) ? '#fff8e1' : undefined }}>
-                            <TableCell sx={{ ...cell, py: 0.25, fontSize: 13 }}>{b.smc_no}</TableCell>
-                            <TableCell sx={{ ...num, py: 0.25, fontSize: 13 }}>{money(b.net_amount)}</TableCell>
-                            <TableCell sx={{ ...num, py: 0.25, fontSize: 13 }}>{b.pack_qty}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </Box>
-                ))}
-              </Box>
-            ))}
+                      )];
+                      if (!sOpen) return rows;
+                      s.customers.forEach((c) => {
+                        const ck = `c:${s.code}:${c.key}`;
+                        const cOpen = !collapsed.has(ck);
+                        rows.push(
+                          <TableRow key={ck} sx={{ bgcolor: '#f8f9fc' }}>
+                            <TableCell sx={{ ...cell, pl: 3.5, fontWeight: 600 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <IconButton size="small" sx={{ p: 0.25 }} onClick={() => toggleRow(ck)} aria-label={cOpen ? 'collapse' : 'expand'}>
+                                  {cOpen ? <KeyboardArrowDown fontSize="small" /> : <KeyboardArrowRight fontSize="small" />}
+                                </IconButton>
+                                <span>
+                                  {c.name}
+                                  {c.place && <Box component="span" sx={{ color: '#777', fontWeight: 400 }}> · {c.place}</Box>}
+                                </span>
+                              </Box>
+                            </TableCell>
+                            <TableCell sx={{ ...num, fontWeight: 600 }}>{money(c.hasAmount ? c.amount : null)}</TableCell>
+                            <TableCell sx={{ ...num, fontWeight: 600 }}>{c.cases}</TableCell>
+                          </TableRow>,
+                        );
+                        if (cOpen) {
+                          c.bills.forEach((bill) => rows.push(
+                            <TableRow
+                              key={`${ck}:${billKey(bill)}`}
+                              sx={{ bgcolor: (marks[billKey(bill)] ?? null) !== (saved[billKey(bill)] ?? null) ? '#fff8e1' : undefined }}
+                            >
+                              <TableCell sx={{ ...cell, pl: 8, fontSize: 13 }}>{bill.smc_no}</TableCell>
+                              <TableCell sx={{ ...num, fontSize: 13 }}>{money(bill.net_amount)}</TableCell>
+                              <TableCell sx={{ ...num, fontSize: 13 }}>{bill.pack_qty}</TableCell>
+                            </TableRow>,
+                          ));
+                        }
+                      });
+                      return rows;
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
           </Paper>
         </Box>
       </Box>
