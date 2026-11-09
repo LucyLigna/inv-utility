@@ -4,7 +4,7 @@ import {
   TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
 import {
-  KeyboardArrowDown, KeyboardArrowRight, LockOutlined, Refresh, Save, UnfoldLess, UnfoldMore,
+  CloudDownload, KeyboardArrowDown, KeyboardArrowRight, LockOutlined, Refresh, Save, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
 import { useConfirm } from '../../components/ConfirmDialog';
@@ -42,9 +42,10 @@ export default function BranchBillMarking() {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [keepMarks, setKeepMarks] = useState(false); // reload after Get Latest Bills: keep unsaved ticks
   const [confirm, confirmDialog] = useConfirm();
-  const [collapsed, setCollapsed] = useState(new Set()); // tree rows closed on the right ('s:<sheet>', 'c:<sheet>:<customer>')
-  const toggleRow = (key) => setCollapsed((s) => {
+  const [opened, setOpened] = useState(new Set()); // tree rows open on the right ('s:<sheet>', 'c:<sheet>:<customer>'); all closed at first
+  const toggleRow = (key) => setOpened((s) => {
     const next = new Set(s);
     if (next.has(key)) next.delete(key);
     else next.add(key);
@@ -84,13 +85,37 @@ export default function BranchBillMarking() {
         setBills(b.data);
         setSheets(s.data);
         setSaved(stored);
-        setMarks(stored);
+        // after Get Latest Bills, unsaved ticks stay for the bills that are still listed
+        setMarks((m) => (keepMarks ? { ...stored, ...Object.fromEntries(Object.entries(m).filter(([k]) => k in stored)) } : stored));
+        setKeepMarks(false);
         setError('');
       } catch (err) {
         setError(errorMessage(err));
       }
     });
   }, [branch, fromDate, toDate, reloadKey]);
+
+  // Runs the customer and salesdetails syncs now (instead of waiting for the half-hourly schedule), then reloads
+  // the bills; unsaved marking is kept for bills still in the list
+  const getLatestBills = async () => {
+    const summary = [];
+    try {
+      for (const [job, label] of [['customer', 'customers'], ['salesdetails', 'bills']]) {
+        const { data } = await run(
+          `Getting the latest ${label} from INV… This can take a few minutes.`,
+          () => api.post(`/branch-bills/sync/${job}/run`),
+        );
+        if (data.skipped) summary.push(`${label}: already being fetched by the scheduler`);
+        else if (data.status === 'Failed') summary.push(`${label}: failed (${data.message || 'see the sync log'})`);
+        else summary.push(`${data.saved} ${label} received`);
+      }
+      setNotice(`Latest data fetched: ${summary.join(', ')}`);
+      setKeepMarks(true);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(`Could not fetch the latest bills: ${errorMessage(err)}`);
+    }
+  };
 
   const changes = bills.filter((b) => (marks[billKey(b)] ?? null) !== (saved[billKey(b)] ?? null));
   const dirty = changes.length > 0;
@@ -175,7 +200,7 @@ export default function BranchBillMarking() {
     });
   }, [bills, marks, sheetByCode]);
   const treeKeys = tree.flatMap((s) => [`s:${s.code}`, ...s.customers.map((c) => `c:${s.code}:${c.key}`)]);
-  const allOpen = collapsed.size === 0;
+  const allOpen = treeKeys.length > 0 && treeKeys.every((k) => opened.has(k));
 
   if (branches && !branches.length) {
     return (
@@ -192,6 +217,7 @@ export default function BranchBillMarking() {
         left={[
           { label: busy === 'Saving…' ? 'Saving…' : 'Save', icon: <Save />, onClick: save, disabled: !dirty || Boolean(busy) },
           { label: 'Refresh', icon: <Refresh />, onClick: guard(() => setReloadKey((k) => k + 1)), disabled: !branch || Boolean(busy) },
+          { label: 'Get Latest Bills', icon: <CloudDownload />, onClick: getLatestBills, disabled: !branch || Boolean(busy) },
         ]}
       />
       <Box sx={{ p: 2.5 }}>
@@ -318,7 +344,7 @@ export default function BranchBillMarking() {
               {tree.length > 0 && (
                 <Button
                   size="small" startIcon={allOpen ? <UnfoldLess /> : <UnfoldMore />}
-                  onClick={() => setCollapsed(allOpen ? new Set(treeKeys) : new Set())}
+                  onClick={() => setOpened(allOpen ? new Set() : new Set(treeKeys))}
                 >
                   {allOpen ? 'Collapse all' : 'Expand all'}
                 </Button>
@@ -339,7 +365,7 @@ export default function BranchBillMarking() {
                   <TableBody>
                     {tree.flatMap((s) => {
                       const sk = `s:${s.code}`;
-                      const sOpen = !collapsed.has(sk);
+                      const sOpen = opened.has(sk);
                       const rows = [(
                         <TableRow key={sk} sx={{ bgcolor: '#e8eefb' }}>
                           <TableCell sx={{ ...cell, fontWeight: 700 }}>
@@ -360,7 +386,7 @@ export default function BranchBillMarking() {
                       if (!sOpen) return rows;
                       s.customers.forEach((c) => {
                         const ck = `c:${s.code}:${c.key}`;
-                        const cOpen = !collapsed.has(ck);
+                        const cOpen = opened.has(ck);
                         rows.push(
                           <TableRow key={ck} sx={{ bgcolor: '#f8f9fc' }}>
                             <TableCell sx={{ ...cell, pl: 3.5, fontWeight: 600 }}>
