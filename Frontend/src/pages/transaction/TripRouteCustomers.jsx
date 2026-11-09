@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert, Autocomplete, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton,
+  Alert, Autocomplete, Backdrop, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton,
   Paper, Snackbar, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
 import {
@@ -62,6 +62,15 @@ export default function TripRouteCustomers() {
   const [details, setDetails] = useState(null); // customer shown in the details pop-up
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(''); // message shown while the server is working (Process, adding, Save)
+  const run = async (message, work) => {
+    setBusy(message);
+    try {
+      return await work();
+    } finally {
+      setBusy('');
+    }
+  };
   const dragRef = useRef(null);
   const [confirm, confirmDialog] = useConfirm();
 
@@ -83,7 +92,7 @@ export default function TripRouteCustomers() {
   const process = async (r = route) => {
     if (!r || !(await confirmDiscard())) return;
     try {
-      const { data } = await api.get(`/trip-route-customers/${r.code}`);
+      const { data } = await run(`Loading the customers of ${r.name}…`, () => api.get(`/trip-route-customers/${r.code}`));
       const g = toGroups(data.customers);
       setLoaded({ route: data.route, branches: data.branches });
       setGroups(g);
@@ -99,11 +108,11 @@ export default function TripRouteCustomers() {
   const save = async () => {
     try {
       const rows = toRows(groups);
-      await api.put(`/trip-route-customers/${loaded.route.code}`, {
+      await run('Saving…', () => api.put(`/trip-route-customers/${loaded.route.code}`, {
         customers: rows.map(({ company_code, ba_code, cu_code, main_sub, remarks }) => ({
           company_code, ba_code, cu_code, main_sub, remarks,
         })),
-      });
+      }));
       setSavedKey(snapshot(groups));
       setNotice(`Saved ${rows.length} customers for ${loaded.route.name}`);
     } catch (err) {
@@ -145,9 +154,9 @@ export default function TripRouteCustomers() {
 
   // Picking a search result: offer customers with the same GST number (or mobile) to add under it
   const pick = async (c) => {
-    if (inList.has(keyOf(c))) return;
+    if (inList.has(keyOf(c)) || busy) return;
     try {
-      const data = await fetchRelated(c);
+      const data = await run(`Adding ${c.cuc_desc}: finding customers with the same GST number / mobile…`, () => fetchRelated(c));
       if (!data.customers.length) {
         setGroups((g) => [...g, { main: c, subs: [] }]);
         return;
@@ -161,7 +170,8 @@ export default function TripRouteCustomers() {
   // "Add sub customers" on a main customer already in the list
   const addSubsTo = async (gi) => {
     try {
-      openSubPicker(groups[gi].main, gi, await fetchRelated(groups[gi].main));
+      const main = groups[gi].main;
+      openSubPicker(main, gi, await run(`Finding customers with the same GST number / mobile as ${main.cuc_desc}…`, () => fetchRelated(main)));
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -338,8 +348,8 @@ export default function TripRouteCustomers() {
     <Box>
       <ActionBar
         left={[
-          { label: 'Save', icon: <Save />, onClick: save, disabled: !dirty },
-          { label: 'Refresh', icon: <Refresh />, onClick: () => process(loaded?.route), disabled: !loaded },
+          { label: busy === 'Saving…' ? 'Saving…' : 'Save', icon: <Save />, onClick: save, disabled: !dirty || Boolean(busy) },
+          { label: 'Refresh', icon: <Refresh />, onClick: () => process(loaded?.route), disabled: !loaded || Boolean(busy) },
         ]}
       />
       <Box sx={{ p: 2.5 }}>
@@ -357,8 +367,11 @@ export default function TripRouteCustomers() {
             sx={{ width: 380 }}
             renderInput={(params) => <TextField {...params} label="Trip Route" placeholder="Select a route" />}
           />
-          <Button variant="contained" size="large" startIcon={<PlayArrow />} disabled={!route} onClick={() => process()}>
-            Process
+          <Button
+            variant="contained" size="large" disabled={!route || Boolean(busy)} onClick={() => process()}
+            startIcon={busy.startsWith('Loading') ? <CircularProgress size={18} color="inherit" /> : <PlayArrow />}
+          >
+            {busy.startsWith('Loading') ? 'Processing…' : 'Process'}
           </Button>
         </Paper>
         {/* The processed route's branches, in their own box to the right */}
@@ -607,6 +620,11 @@ export default function TripRouteCustomers() {
       </Dialog>
 
       {confirmDialog}
+      {/* Processing: covers the screen while the server works, so nothing is clicked twice */}
+      <Backdrop open={Boolean(busy)} sx={{ zIndex: (theme) => theme.zIndex.modal + 1, color: '#fff', flexDirection: 'column', gap: 2 }}>
+        <CircularProgress color="inherit" />
+        <Typography sx={{ fontWeight: 600, textAlign: 'center', px: 2 }}>{busy}</Typography>
+      </Backdrop>
       <Snackbar open={Boolean(notice)} autoHideDuration={3000} onClose={() => setNotice('')} message={notice} />
     </Box>
   );
