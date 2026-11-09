@@ -15,22 +15,24 @@ const RENEW_MS = 30000;
 const newLockId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 // keepalive lets the request finish while the page is closing
-const releaseLock = (basePath, code, lockId) => fetch(`/api${basePath}/${code}/lock`, {
+// token: the login the lock was taken with (on log out the stored token is already gone when the page closes)
+const releaseLock = (basePath, code, lockId, token) => fetch(`/api${basePath}/${code}/lock`, {
   method: 'DELETE',
   keepalive: true,
-  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}`, 'X-Record-Lock': lockId },
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token || getToken()}`, 'X-Record-Lock': lockId },
   body: JSON.stringify({ lockId }),
 }).catch(() => { /* it expires by itself */ });
 
 export default function useRecordLock(basePath, openCode, onLost) {
   const lockId = useRef(newLockId());
   const lockedCode = useRef(null);
+  const lockToken = useRef(null); // the login used to take the lock, to release it even after logging out
   const lost = useRef(onLost);
   lost.current = onLost;
 
   useEffect(() => {
     api.defaults.headers.common['X-Record-Lock'] = lockId.current;
-    const onUnload = () => { if (lockedCode.current != null) releaseLock(basePath, lockedCode.current, lockId.current); };
+    const onUnload = () => { if (lockedCode.current != null) releaseLock(basePath, lockedCode.current, lockId.current, lockToken.current); };
     window.addEventListener('pagehide', onUnload);
     return () => {
       window.removeEventListener('pagehide', onUnload);
@@ -63,8 +65,9 @@ export default function useRecordLock(basePath, openCode, onLost) {
       if (err.response?.status === 403) return { ok: true }; // may only view: no lock needed, changes are refused anyway
       return { ok: false, message: errorMessage(err) };
     }
-    if (lockedCode.current != null && lockedCode.current !== code) releaseLock(basePath, lockedCode.current, lockId.current);
+    if (lockedCode.current != null && lockedCode.current !== code) releaseLock(basePath, lockedCode.current, lockId.current, lockToken.current);
     lockedCode.current = code;
+    lockToken.current = getToken();
     return { ok: true };
   };
 
