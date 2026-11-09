@@ -363,7 +363,7 @@ export default function TripRouteCustomers() {
     );
   };
 
-  const customerCount = toRows(groups).length;
+  const customerCount = toRows(groups).length; // main and sub customers; groups.length = main customers
 
   return (
     <Box>
@@ -426,7 +426,7 @@ export default function TripRouteCustomers() {
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
                 <Typography sx={{ fontWeight: 700 }}>
-                  Selected Customer ({customerCount}){dirty && <Box component="span" sx={{ color: '#c77700', fontWeight: 400 }}> · not saved</Box>}
+                  Selected Customer (Main {groups.length} / All {customerCount}){dirty && <Box component="span" sx={{ color: '#c77700', fontWeight: 400 }}> · not saved</Box>}
                 </Typography>
                 {groupsWithSubs.length > 0 && (
                   <Button
