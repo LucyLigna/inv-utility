@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  Alert, Box, Button, Checkbox, FormControlLabel, Typography,
+  Alert, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, TextField, Tooltip,
+  Typography,
 } from '@mui/material';
-import { LockReset } from '@mui/icons-material';
+import { AccountTree, LockReset } from '@mui/icons-material';
 import MasterScreen from '../../components/MasterScreen';
 import FormSection from '../../components/FormSection';
 import { StatusCell } from '../../components/ListTable';
@@ -70,48 +71,98 @@ function RightsPicker({ form, setForm, readOnly }) {
   );
 }
 
-// Branches for a 'User' (Branch Wise Bill Marking shows bills of these branches); administrators have all
+// Branches for a 'User' (Branch Wise Bill Marking shows bills of these branches); administrators have all.
+// The form shows the selected branches' codes; they are chosen in a pop-up, which also opens by itself when
+// Branch Wise Bill Marking is ticked under Rights.
+const BILL_MARKING = 'P0204';
+
 function BranchPicker({ form, setForm, readOnly }) {
   const [branches, setBranches] = useState([]);
   const [error, setError] = useState('');
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState([]); // ticks in the pop-up until OK
+  const [search, setSearch] = useState('');
+  const hadMarking = useRef(form.rights.includes(BILL_MARKING));
 
   useEffect(() => {
     api.get('/users/branches').then(({ data }) => setBranches(data)).catch((err) => setError(errorMessage(err)));
   }, []);
 
+  const openPicker = () => {
+    setDraft(form.branches);
+    setSearch('');
+    setOpen(true);
+  };
+
+  // Ticking Branch Wise Bill Marking under Rights opens the pop-up to choose the user's branches
+  const hasMarking = form.rights.includes(BILL_MARKING);
+  useEffect(() => {
+    if (hasMarking && !hadMarking.current && !readOnly && form.user_type === 'User') openPicker();
+    hadMarking.current = hasMarking;
+  }, [hasMarking]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (form.user_type === 'Administrator') return null;
-  const keyOf = (b) => `${b.company_code}|${b.ba_code}`;
-  const has = (k) => form.branches.includes(k);
-  const toggle = (k) => setForm({ ...form, branches: has(k) ? form.branches.filter((x) => x !== k) : [...form.branches, k] });
-  const all = branches.length > 0 && branches.every((b) => has(keyOf(b)));
-  const needed = form.rights.includes('P0204');
+  const keyOf = (x) => `${x.company_code}|${x.ba_code}`;
+  const byKey = new Map(branches.map((x) => [keyOf(x), x]));
+  const selected = form.branches.map((k) => byKey.get(k)).filter(Boolean)
+    .sort((x, y) => String(x.company_branch_code).localeCompare(String(y.company_branch_code)));
+  const q = search.trim().toLowerCase();
+  const shown = branches.filter((x) => !q || `${x.company_branch} ${x.company_branch_code}`.toLowerCase().includes(q));
+  const has = (k) => draft.includes(k);
+  const toggle = (k) => setDraft((d) => (d.includes(k) ? d.filter((x) => x !== k) : [...d, k]));
+  const allShown = shown.length > 0 && shown.every((x) => has(keyOf(x)));
 
   return (
     <FormSection
-      title={needed ? 'Branches *' : 'Branches'}
+      title={hasMarking ? 'Branches *' : 'Branches'}
       hint="Branches whose bills this user works on in Branch Wise Bill Marking (at least one when that screen is ticked)."
     >
       {error && <Alert severity="error">{error}</Alert>}
-      <Box sx={{ border: '1px solid #e3e5ea', borderRadius: 1.5, p: 1.5 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography sx={{ fontWeight: 700 }}>{form.branches.length} of {branches.length} selected</Typography>
-          {!readOnly && (
-            <Button size="small" onClick={() => setForm({ ...form, branches: all ? [] : branches.map(keyOf) })}>
-              {all ? 'Clear all' : 'Select all'}
-            </Button>
-          )}
-        </Box>
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', lg: '1fr 1fr 1fr' } }}>
-          {branches.map((b) => (
-            <FormControlLabel
-              key={keyOf(b)}
-              disabled={readOnly}
-              label={<>{b.company_branch} <Box component="span" sx={{ color: '#888', fontSize: 13 }}>({b.company_branch_code})</Box></>}
-              control={<Checkbox size="small" checked={has(keyOf(b))} onChange={() => toggle(keyOf(b))} />}
-            />
-          ))}
-        </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+        {selected.map((x) => (
+          <Tooltip key={keyOf(x)} title={x.company_branch}>
+            <Chip size="small" label={x.company_branch_code} />
+          </Tooltip>
+        ))}
+        {!selected.length && <Typography variant="body2" color="text.secondary">No branch selected</Typography>}
+        {!readOnly && (
+          <Button size="small" variant="outlined" startIcon={<AccountTree />} onClick={openPicker} sx={{ ml: 0.5 }}>
+            {selected.length ? 'Change branches' : 'Select branches'}
+          </Button>
+        )}
       </Box>
+
+      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Branches of {form.username || 'this user'}</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 1.5, mt: 0.5 }}>
+            <TextField size="small" placeholder="Search branch or code" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ flex: 1 }} autoFocus />
+            <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>{draft.length} of {branches.length} selected</Typography>
+            <Button
+              size="small"
+              onClick={() => setDraft((d) => (allShown
+                ? d.filter((k) => !shown.some((x) => keyOf(x) === k))
+                : [...new Set([...d, ...shown.map(keyOf)])]))}
+            >
+              {allShown ? 'Clear all' : 'Select all'}
+            </Button>
+          </Box>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, columnGap: 2 }}>
+            {shown.map((x) => (
+              <FormControlLabel
+                key={keyOf(x)}
+                label={<><b>{x.company_branch_code}</b> <Box component="span" sx={{ color: '#666', fontSize: 13 }}>{x.company_branch}</Box></>}
+                control={<Checkbox size="small" checked={has(keyOf(x))} onChange={() => toggle(keyOf(x))} />}
+              />
+            ))}
+            {!shown.length && <Typography variant="body2" color="text.secondary">No branch matches.</Typography>}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={() => { setForm((f) => ({ ...f, branches: draft })); setOpen(false); }}>OK</Button>
+        </DialogActions>
+      </Dialog>
     </FormSection>
   );
 }
