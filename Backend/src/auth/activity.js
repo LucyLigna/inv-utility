@@ -31,7 +31,7 @@ function summarize(body) {
 // Named steps at the end of a path, e.g. POST /api/trip-sheets/3/close
 const STEP_ACTIONS = {
   close: 'Close', reopen: 'Reopen', map: 'Map to route', 'expire-password': 'Expire password', run: 'Run sync', 'driver-code': 'Driver code',
-  complete: 'Mark complete', 'reopen-bills': 'Reopen bills',
+  complete: 'Mark complete', 'reopen-bills': 'Reopen bills', save: 'Save bills',
 };
 
 // Logs successful changes (anything but GET) on a screen's API: who, which screen, what, which record

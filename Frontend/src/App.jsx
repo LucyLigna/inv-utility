@@ -11,6 +11,7 @@ import TripRoute from './pages/master/TripRoute';
 import TripRouteCustomers from './pages/transaction/TripRouteCustomers';
 import TripSheet from './pages/transaction/TripSheet';
 import TripSheetBills from './pages/transaction/TripSheetBills';
+import BranchBillMarking from './pages/transaction/BranchBillMarking';
 import Users from './pages/admin/Users';
 import UserLog from './pages/admin/UserLog';
 import DriverApp from './pages/driver/DriverApp';
@@ -22,6 +23,7 @@ const SCREENS = [
   ['/transaction/trip-route-customers', <TripRouteCustomers />],
   ['/transaction/trip-sheet', <TripSheet />],
   ['/transaction/trip-sheet-bills', <TripSheetBills />],
+  ['/transaction/branch-bill-marking', <BranchBillMarking />],
   ['/admin/users', <Users />],
   ['/admin/user-log', <UserLog />],
 ];

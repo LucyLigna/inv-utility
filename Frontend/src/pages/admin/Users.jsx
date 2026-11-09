@@ -70,6 +70,52 @@ function RightsPicker({ form, setForm, readOnly }) {
   );
 }
 
+// Branches for a 'User' (Branch Wise Bill Marking shows bills of these branches); administrators have all
+function BranchPicker({ form, setForm, readOnly }) {
+  const [branches, setBranches] = useState([]);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.get('/users/branches').then(({ data }) => setBranches(data)).catch((err) => setError(errorMessage(err)));
+  }, []);
+
+  if (form.user_type === 'Administrator') return null;
+  const keyOf = (b) => `${b.company_code}|${b.ba_code}`;
+  const has = (k) => form.branches.includes(k);
+  const toggle = (k) => setForm({ ...form, branches: has(k) ? form.branches.filter((x) => x !== k) : [...form.branches, k] });
+  const all = branches.length > 0 && branches.every((b) => has(keyOf(b)));
+  const needed = form.rights.includes('P0204');
+
+  return (
+    <FormSection
+      title={needed ? 'Branches *' : 'Branches'}
+      hint="Branches whose bills this user works on in Branch Wise Bill Marking (at least one when that screen is ticked)."
+    >
+      {error && <Alert severity="error">{error}</Alert>}
+      <Box sx={{ border: '1px solid #e3e5ea', borderRadius: 1.5, p: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography sx={{ fontWeight: 700 }}>{form.branches.length} of {branches.length} selected</Typography>
+          {!readOnly && (
+            <Button size="small" onClick={() => setForm({ ...form, branches: all ? [] : branches.map(keyOf) })}>
+              {all ? 'Clear all' : 'Select all'}
+            </Button>
+          )}
+        </Box>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', lg: '1fr 1fr 1fr' } }}>
+          {branches.map((b) => (
+            <FormControlLabel
+              key={keyOf(b)}
+              disabled={readOnly}
+              label={<>{b.company_branch} <Box component="span" sx={{ color: '#888', fontSize: 13 }}>({b.company_branch_code})</Box></>}
+              control={<Checkbox size="small" checked={has(keyOf(b))} onChange={() => toggle(keyOf(b))} />}
+            />
+          ))}
+        </Box>
+      </Box>
+    </FormSection>
+  );
+}
+
 const makeConfig = (me) => ({
   title: 'Users',
   entity: 'User',
@@ -89,6 +135,14 @@ const makeConfig = (me) => ({
       exportValue: (r) => (r.user_type === 'Administrator' ? 'All' : r.rights.length),
     },
     {
+      label: 'Branches',
+      field: 'branches',
+      width: 110,
+      align: 'center',
+      render: (r) => (r.user_type === 'Administrator' ? 'All' : (r.branches || []).length),
+      exportValue: (r) => (r.user_type === 'Administrator' ? 'All' : (r.branches || []).length),
+    },
+    {
       label: 'Password',
       field: 'has_password',
       width: 190,
@@ -101,7 +155,7 @@ const makeConfig = (me) => ({
     },
     { label: 'Status', field: 'status', width: 130, render: (r) => <StatusCell status={r.status} /> },
   ],
-  description: 'User name, user type, status and screen rights. A new user creates a password at the first login.',
+  description: 'User name, user type, status, screen rights and branches. A new user creates a password at the first login.',
   fields: [
     { name: 'username', label: 'User Name', required: true, maxLength: 50, unique: true, cols: 5 },
     {
@@ -118,16 +172,26 @@ const makeConfig = (me) => ({
     },
   ],
   statusCols: 4,
-  empty: { username: '', user_type: 'User', status: 'Active', rights: [] },
-  toForm: (r) => ({ username: r.username, user_type: r.user_type, status: r.status, rights: r.rights || [] }),
+  empty: { username: '', user_type: 'User', status: 'Active', rights: [], branches: [] },
+  toForm: (r) => ({
+    username: r.username, user_type: r.user_type, status: r.status, rights: r.rights || [], branches: r.branches || [],
+  }),
   validate: (f) => {
     if (/\s/.test(f.username.trim())) return 'User name cannot contain spaces';
     if (f.user_type === 'User' && f.status === 'Active' && !f.rights.length) {
       return 'Give an active user the right to at least one screen (tick it under Rights)';
     }
+    if (f.user_type === 'User' && f.rights.includes('P0204') && !f.branches.length) {
+      return 'Select at least one branch for Branch Wise Bill Marking (under Branches)';
+    }
     return null;
   },
-  renderExtra: (props) => <RightsPicker {...props} />,
+  renderExtra: (props) => (
+    <>
+      <RightsPicker {...props} />
+      <BranchPicker {...props} />
+    </>
+  ),
   actions: [{
     label: 'Expire Password',
     icon: <LockReset />,

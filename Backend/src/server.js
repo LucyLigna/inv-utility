@@ -28,6 +28,7 @@ app.use('/api/trip-routes', screen('P0103', 'Trip Route'), require('./routes/tri
 app.use('/api/trip-route-customers', screen('P0201', 'Trip Route Wise Customers'), require('./routes/tripRouteCustomers'));
 app.use('/api/trip-sheets', screen('P0202', 'Trip Sheet'), require('./routes/tripSheet'));
 app.use('/api/trip-sheet-bills', screen('P0203', 'Trip Sheet - Bill Details'), require('./routes/tripSheetBills'));
+app.use('/api/branch-bills', screen('P0204', 'Branch Wise Bill Marking'), require('./routes/branchBills'));
 // "Get Latest Bills" on Trip Sheet - Bill Details runs syncs
 app.use('/api/sync', screen('P0203', 'Trip Sheet - Bill Details'), require('./routes/sync'));
 app.use('/api/users', requireAdmin, logActivity('P0301', 'Users'), require('./routes/users'));

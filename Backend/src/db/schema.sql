@@ -207,6 +207,17 @@ CREATE TABLE IF NOT EXISTS sys_user_rights (
   CONSTRAINT fk_user_rights_program FOREIGN KEY (program_code) REFERENCES sys_programfile (program_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Branches a user of type User works on (Branch Wise Bill Marking shows only these); administrators have all
+CREATE TABLE IF NOT EXISTS sys_user_branches (
+  user_code    INT        NOT NULL,
+  company_code VARCHAR(3) NOT NULL,
+  ba_code      VARCHAR(4) NOT NULL,
+  created_by   INT        DEFAULT NULL, -- user_code of the user who created the row
+  updated_by   INT        DEFAULT NULL, -- user_code of the user who last changed the row
+  PRIMARY KEY (user_code, company_code, ba_code),
+  CONSTRAINT fk_user_branches_user FOREIGN KEY (user_code) REFERENCES sys_users (user_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Application settings kept in the database (e.g. the key that signs login tokens, created on first start)
 CREATE TABLE IF NOT EXISTS sys_settings (
   setting_key   VARCHAR(50)  NOT NULL PRIMARY KEY,
@@ -244,6 +255,7 @@ INSERT IGNORE INTO sys_programfile (program_code, menu_code, name, route, sort_o
   ('P0201', 'M02', 'Trip Route Wise Customers', '/transaction/trip-route-customers', 1),
   ('P0202', 'M02', 'Trip Sheet', '/transaction/trip-sheet', 2),
   ('P0203', 'M02', 'Trip Sheet - Bill Details', '/transaction/trip-sheet-bills', 3),
+  ('P0204', 'M02', 'Branch Wise Bill Marking', '/transaction/branch-bill-marking', 4),
   ('P0301', 'M03', 'Users', '/admin/users', 1),
   ('P0302', 'M03', 'User Log', '/admin/user-log', 2);
 

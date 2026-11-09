@@ -1,10 +1,11 @@
-// User administration (administrators only): users, their type, status and screen rights
+// User administration (administrators only): users, their type, status, screen rights and branches
 const express = require('express');
 const pool = require('../config/db');
 
 const router = express.Router();
 const TYPES = ['Administrator', 'User'];
 const STATUSES = ['Active', 'Inactive'];
+const BILL_MARKING = 'P0204'; // Branch Wise Bill Marking: works on the user's branches
 
 // Screens that can be given to a user, grouped by module (Administration screens are for administrators only)
 router.get('/programs', async (req, res, next) => {
@@ -21,6 +22,18 @@ router.get('/programs', async (req, res, next) => {
   }
 });
 
+// Branches that can be given to a user (Branch Wise Bill Marking): 'company|branch' keys with their names
+router.get('/branches', async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT company_code, ba_code, company_branch, company_branch_code FROM view_branch_list ORDER BY company_branch`
+    );
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/', async (req, res, next) => {
   try {
     const [users] = await pool.query(
@@ -30,10 +43,12 @@ router.get('/', async (req, res, next) => {
        FROM sys_users ORDER BY username`
     );
     const [rights] = await pool.query('SELECT user_code, program_code FROM sys_user_rights');
+    const [branches] = await pool.query('SELECT user_code, company_code, ba_code FROM sys_user_branches');
     res.json(users.map((u) => ({
       ...u,
       has_password: Boolean(u.has_password),
       rights: rights.filter((r) => r.user_code === u.code).map((r) => r.program_code),
+      branches: branches.filter((b) => b.user_code === u.code).map((b) => `${b.company_code}|${b.ba_code}`),
     })));
   } catch (err) {
     next(err);
@@ -68,7 +83,13 @@ function validate(body) {
   if (userType === 'User' && status === 'Active' && !rights.length) {
     return { error: 'Give an active user the right to at least one screen' };
   }
-  return { username, user_type: userType, status, rights };
+  // Branches ('company|branch'), for type User only; Branch Wise Bill Marking needs at least one
+  const branches = userType === 'Administrator' ? []
+    : [...new Set((Array.isArray(body.branches) ? body.branches : []).map(String))].filter((k) => /^[^|]+\|[^|]+$/.test(k));
+  if (userType === 'User' && rights.includes(BILL_MARKING) && !branches.length) {
+    return { error: 'Select at least one branch for Branch Wise Bill Marking' };
+  }
+  return { username, user_type: userType, status, rights, branches };
 }
 
 // Screens kept from before keep who gave them; new ones are recorded against the administrator saving now
@@ -89,6 +110,26 @@ async function saveRights(conn, userCode, rights, by) {
   }
 }
 
+// The user's branches: kept ones keep who gave them, like rights
+async function saveBranches(conn, userCode, branches, by) {
+  const [before] = await conn.query('SELECT company_code, ba_code, created_by FROM sys_user_branches WHERE user_code = ?', [userCode]);
+  const givenBy = new Map(before.map((b) => [`${b.company_code}|${b.ba_code}`, b.created_by]));
+  await conn.query('DELETE FROM sys_user_branches WHERE user_code = ?', [userCode]);
+  if (!branches.length) return;
+  const [valid] = await conn.query(
+    'SELECT company_code, ba_code FROM view_branch_list WHERE (company_code, ba_code) IN (?)',
+    [branches.map((k) => k.split('|'))]
+  );
+  if (valid.length) {
+    await conn.query('INSERT INTO sys_user_branches (user_code, company_code, ba_code, created_by, updated_by) VALUES ?', [
+      valid.map((v) => {
+        const key = `${v.company_code}|${v.ba_code}`;
+        return [userCode, v.company_code, v.ba_code, givenBy.has(key) ? givenBy.get(key) : by, by];
+      }),
+    ]);
+  }
+}
+
 // New user: no password yet; they create it at their first login
 router.post('/', async (req, res, next) => {
   const u = validate(req.body);
@@ -101,6 +142,7 @@ router.post('/', async (req, res, next) => {
       [u.username, u.user_type, u.status, req.user.user_code, req.user.user_code]
     );
     await saveRights(conn, result.insertId, u.rights, req.user.user_code);
+    await saveBranches(conn, result.insertId, u.branches, req.user.user_code);
     await conn.commit();
     res.status(201).json({ code: result.insertId, ...u });
   } catch (err) {
@@ -145,6 +187,7 @@ router.put('/:code', async (req, res, next) => {
       u.username, u.user_type, u.status, req.user.user_code, code,
     ]);
     await saveRights(conn, code, u.rights, req.user.user_code);
+    await saveBranches(conn, code, u.branches, req.user.user_code);
     await conn.commit();
     res.json({ code, ...u });
   } catch (err) {
