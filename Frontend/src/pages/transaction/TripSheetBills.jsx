@@ -191,7 +191,7 @@ export default function TripSheetBills() {
 
   // Bills that can be added, reloaded when the sheet or a filter changes
   useEffect(() => {
-    if (!sheet || !editing) return undefined;
+    if (!sheet) return undefined;
     const timer = setTimeout(async () => {
       setLoadingBills(true);
       try {
@@ -206,7 +206,7 @@ export default function TripSheetBills() {
       }
     }, search ? 350 : 0);
     return () => clearTimeout(timer);
-  }, [sheet, editing, customers, transport, search, fromDate, toDate, reloadKey]);
+  }, [sheet, customers, transport, search, fromDate, toDate, reloadKey]);
 
   // Runs the customer and salesdetails syncs now (instead of waiting for the half-hourly schedule),
   // then reloads the bills list
@@ -715,15 +715,9 @@ export default function TripSheetBills() {
               </TableContainer>
             </Paper>
 
-            {/* Right: bills to add; ones already on the sheet are not shown. A completed sheet takes no more bills. */}
-            {!editing && !complete ? (
-              <Paper variant="outlined" sx={{ p: 2 }}>
-                <Alert severity="info" icon={<Visibility />}>
-                  <b>Viewing only.</b> Others can open this trip sheet too.
-                  {canEdit ? ' Press Edit to add or remove bills; it is then open for editing on this page only.' : ' You may view this trip sheet but not change its bills.'}
-                </Alert>
-              </Paper>
-            ) : complete ? (
+            {/* Right: bills to add; ones already on the sheet are not shown. Shown when viewing too, but bills are
+                added (and manual bills entered, edited or deleted) only while editing. A completed sheet takes none. */}
+            {complete ? (
               <Paper variant="outlined" sx={{ p: 2 }}>
                 <Alert severity="success" icon={<TaskAlt />}>
                   <b>Bills complete</b> since {showDate(sheet.bills_completed_at.slice(0, 10))} {sheet.bills_completed_at.slice(11)}
@@ -735,7 +729,7 @@ export default function TripSheetBills() {
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap', mb: 1.5 }}>
                 <Typography sx={{ fontWeight: 700, mr: 'auto' }}>Bills</Typography>
-                <Button size="small" variant="outlined" startIcon={<NoteAdd />} onClick={() => setManualOpen(true)}>
+                <Button size="small" variant="outlined" startIcon={<NoteAdd />} onClick={() => setManualOpen(true)} disabled={!editing}>
                   Manual Bill
                 </Button>
                 <TextField
@@ -757,14 +751,19 @@ export default function TripSheetBills() {
                   <ToggleButton value="all">All customers</ToggleButton>
                 </ToggleButtonGroup>
                 <TextField size="small" placeholder="Bill no or customer" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ flex: 1, minWidth: 160 }} />
-                <Button size="small" startIcon={<PlaylistAdd />} disabled={!pickable.length} onClick={() => addBills(pickable)}>
+                <Button size="small" startIcon={<PlaylistAdd />} disabled={!editing || !pickable.length} onClick={() => addBills(pickable)}>
                   Add all
                 </Button>
               </Box>
               <Typography variant="body2" color="text.secondary" mb={1}>
                 {loadingBills ? 'Loading…' : `${pickable.length} bills${transport === 'own' ? ' (own transport)' : ''} for ${
-                  customers === 'route' ? 'customers on this route' : "all customers in the route's branches"}. Click a bill to add it.`}
+                  customers === 'route' ? 'customers on this route' : "all customers in the route's branches"}.${editing ? ' Click a bill to add it.' : ''}`}
               </Typography>
+              {!editing && (
+                <Alert severity="info" icon={<Visibility />} sx={{ mb: 1, py: 0 }}>
+                  Viewing only: bills can't be added.{canEdit ? ' Press Edit to add or remove bills.' : ''}
+                </Alert>
+              )}
               <TableContainer sx={{ maxHeight: 'calc(100vh - 420px)' }}>
                 <Table stickyHeader size="small" sx={{ borderCollapse: 'collapse' }}>
                   <TableHead>
@@ -781,9 +780,9 @@ export default function TripSheetBills() {
                   </TableHead>
                   <TableBody>
                     {pickable.map((b) => (
-                      <TableRow key={billKey(b)} hover onClick={() => addBills([b])} sx={{ cursor: 'pointer' }}>
+                      <TableRow key={billKey(b)} hover onClick={() => editing && addBills([b])} sx={{ cursor: editing ? 'pointer' : 'default' }}>
                         <TableCell sx={{ ...cell, py: 0 }} align="center">
-                          <AddCircleOutline fontSize="small" sx={{ color: '#1a35b0', verticalAlign: 'middle' }} />
+                          <AddCircleOutline fontSize="small" sx={{ color: editing ? '#1a35b0' : '#c4c8d0', verticalAlign: 'middle' }} />
                         </TableCell>
                         <TableCell sx={{ ...cell, whiteSpace: 'nowrap' }}>
                           {b.smc_no}
@@ -791,12 +790,12 @@ export default function TripSheetBills() {
                             <>
                               <Chip size="small" label="Manual" sx={{ ml: 0.5, height: 18, fontSize: 11 }} />
                               <Tooltip title="Edit this manual bill">
-                                <IconButton size="small" sx={{ p: 0.25 }} onClick={(e) => { e.stopPropagation(); setEditingBill(b); }} aria-label="edit manual bill">
+                                <IconButton size="small" sx={{ p: 0.25 }} disabled={!editing} onClick={(e) => { e.stopPropagation(); setEditingBill(b); }} aria-label="edit manual bill">
                                   <EditOutlined fontSize="small" />
                                 </IconButton>
                               </Tooltip>
                               <Tooltip title="Delete this manual bill">
-                                <IconButton size="small" sx={{ p: 0.25 }} onClick={(e) => { e.stopPropagation(); deleteManual(b); }}>
+                                <IconButton size="small" sx={{ p: 0.25 }} disabled={!editing} onClick={(e) => { e.stopPropagation(); deleteManual(b); }}>
                                   <DeleteOutline fontSize="small" />
                                 </IconButton>
                               </Tooltip>
