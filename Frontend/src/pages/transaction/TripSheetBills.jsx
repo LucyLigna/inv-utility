@@ -460,6 +460,8 @@ export default function TripSheetBills() {
               options={sheets}
               value={picked}
               onChange={(e, value) => setPicked(value)}
+              // With changes not saved the sheet can't be switched: Save, or Discard (View only / Refresh) first
+              disabled={dirty}
               getOptionLabel={sheetLabel}
               isOptionEqualToValue={(a, b) => a.code === b.code}
               renderOption={(props, s) => (
@@ -473,10 +475,16 @@ export default function TripSheetBills() {
                 </li>
               )}
               sx={{ width: 460 }}
-              renderInput={(params) => <TextField {...params} label="Trip Sheet" placeholder="Select a trip sheet" />}
+              renderInput={(params) => (
+                <TextField
+                  {...params} label="Trip Sheet" placeholder="Select a trip sheet"
+                  helperText={dirty ? 'Not saved: Save, or discard the changes, before choosing another trip sheet' : undefined}
+                  FormHelperTextProps={{ sx: { color: '#c77700', mx: 0 } }}
+                />
+              )}
             />
             <Button
-              variant="outlined" size="large" disabled={!picked || Boolean(busy)} onClick={() => process(picked, false)}
+              variant="outlined" size="large" disabled={!picked || dirty || Boolean(busy)} onClick={() => process(picked, false)}
               startIcon={busy.startsWith('Loading') ? <CircularProgress size={18} color="inherit" /> : <Visibility />}
             >
               View
@@ -485,7 +493,7 @@ export default function TripSheetBills() {
               <Tooltip title="Open for adding, removing and saving bills (one page at a time)">
                 <span>
                   <Button
-                    variant="contained" size="large" disabled={!picked || Boolean(busy)} onClick={() => process(picked, true)}
+                    variant="contained" size="large" disabled={!picked || dirty || Boolean(busy)} onClick={() => process(picked, true)}
                     startIcon={busy.startsWith('Opening') ? <CircularProgress size={18} color="inherit" /> : <EditOutlined />}
                   >
                     Edit
