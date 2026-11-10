@@ -61,6 +61,7 @@ export default function TripRouteCustomers() {
   const [subSearch, setSubSearch] = useState('');
   const [subResults, setSubResults] = useState([]);
   const [details, setDetails] = useState(null); // customer shown in the details pop-up
+  const [selSearch, setSelSearch] = useState(''); // search in the Selected Customer list
   const [merging, setMerging] = useState(null); // { gi, into: group index or null }: the Merge pop-up
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -384,6 +385,12 @@ export default function TripRouteCustomers() {
   };
 
   const customerCount = toRows(groups).length; // main and sub customers; groups.length = main customers
+  // Search in the Selected Customer list: name, place or branch of a main customer or of one of its subs.
+  // Each group keeps its position (gi) in the full list, so dragging, merging and removing still work.
+  const selQ = selSearch.trim().toLowerCase();
+  const matchesSel = (c) => [c.cuc_desc, c.cuc_place, c.company_branch].some((v) => String(v || '').toLowerCase().includes(selQ));
+  const subHit = (g) => Boolean(selQ) && g.subs.some(matchesSel);
+  const shownGroups = groups.map((g, gi) => ({ g, gi })).filter(({ g }) => !selQ || matchesSel(g.main) || g.subs.some(matchesSel));
 
   return (
     <Box>
@@ -446,7 +453,9 @@ export default function TripRouteCustomers() {
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
                 <Typography sx={{ fontWeight: 700 }}>
-                  Selected Customer ({groups.length} / {customerCount}){dirty && <Box component="span" sx={{ color: '#c77700', fontWeight: 400 }}> · not saved</Box>}
+                  Selected Customer ({groups.length} / {customerCount})
+                  {selQ && <Box component="span" sx={{ fontWeight: 400, color: '#555' }}> · {shownGroups.length} shown</Box>}
+                  {dirty && <Box component="span" sx={{ color: '#c77700', fontWeight: 400 }}> · not saved</Box>}
                 </Typography>
                 {groupsWithSubs.length > 0 && (
                   <Button
@@ -461,6 +470,12 @@ export default function TripRouteCustomers() {
               <Typography variant="body2" color="text.secondary" mb={1}>
                 Drag the grip to change the order; a main customer moves with its sub customers. Click the arrow to show sub customers.
               </Typography>
+              {groups.length > 0 && (
+                <TextField
+                  size="small" fullWidth placeholder="Search customer, place or branch (main or sub customer)"
+                  value={selSearch} onChange={(e) => setSelSearch(e.target.value)} sx={{ mb: 1 }}
+                />
+              )}
               <TableContainer sx={{ maxHeight: 'calc(100vh - 330px)' }}>
                 <Table stickyHeader size="small" sx={{ borderCollapse: 'collapse' }}>
                   <TableHead>
@@ -473,10 +488,16 @@ export default function TripRouteCustomers() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {groups.map((g, gi) => [
+                    {shownGroups.map(({ g, gi }) => [
                       selectedRow(g.main, gi, null, g.subs.length),
-                      ...(expanded.has(keyOf(g.main)) ? g.subs.map((s, si) => selectedRow(s, gi, si)) : []),
+                      // a group found through one of its sub customers is opened
+                      ...(expanded.has(keyOf(g.main)) || subHit(g) ? g.subs.map((s, si) => selectedRow(s, gi, si)) : []),
                     ])}
+                    {groups.length > 0 && !shownGroups.length && (
+                      <TableRow>
+                        <TableCell colSpan={5} align="center" sx={{ ...cell, color: '#888' }}>No customer matches "{selSearch.trim()}".</TableCell>
+                      </TableRow>
+                    )}
                     {!groups.length && (
                       <TableRow>
                         <TableCell colSpan={5} align="center" sx={{ ...cell, color: '#888' }}>
