@@ -82,6 +82,7 @@ export default function TripSheetBills() {
   const [printMenu, setPrintMenu] = useState(null); // element the print-format menu opens from
   const [printFormat, setPrintFormat] = useState('branch');
   const [contacts, setContacts] = useState({}); // mobile and sales executive per customer, for printing
+  const [selSearch, setSelSearch] = useState(''); // search in the Selected Customer table
   const [qr, setQr] = useState({}); // delivery QR per customer, for the customer-wise print
   const [deliveries, setDeliveries] = useState({}); // customers the driver has scanned as delivered
   const [confirm, confirmDialog] = useConfirm();
@@ -397,6 +398,12 @@ export default function TripSheetBills() {
   const totals = groups.reduce((t, g) => ({ bills: t.bills + g.bills.length, cases: t.cases + g.cases, amount: t.amount + g.amount }),
     { bills: 0, cases: 0, amount: 0 });
   const allExpanded = groups.length > 0 && groups.every((g) => expanded.has(g.key));
+  // Search in the Selected Customer table: customer name, place, branch, or a bill # / bill customer.
+  // A customer found through one of its bills is opened so the bill shows.
+  const selQ = selSearch.trim().toLowerCase();
+  const has = (v) => String(v || '').toLowerCase().includes(selQ);
+  const billHit = (g) => g.bills.some((b) => has(b.smc_no) || has(b.cuc_desc));
+  const shownGroups = selQ ? groups.filter((g) => has(g.name) || has(g.place) || has(g.company_branch) || billHit(g)) : groups;
   const toggleGroup = (key) => setExpanded((s) => {
     const next = new Set(s);
     if (next.has(key)) next.delete(key);
@@ -490,7 +497,7 @@ export default function TripSheetBills() {
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                 <Typography sx={{ fontWeight: 700 }}>
-                  Selected Customer ({groups.length})
+                  Selected Customer ({selQ ? `${shownGroups.length} of ` : ''}{groups.length})
                   {dirty && <Box component="span" sx={{ color: '#c77700', fontWeight: 400 }}> · not saved</Box>}
                 </Typography>
                 <Box>
@@ -517,6 +524,12 @@ export default function TripSheetBills() {
                     ? 'In the order of Trip Route Wise Customers. Drag the grip on a customer to change the order for this trip sheet.'
                     : 'In your order for this trip sheet. Drag the grip on a customer to change it.'}
               </Typography>
+              {groups.length > 0 && (
+                <TextField
+                  size="small" fullWidth placeholder="Search customer, place, branch or bill no"
+                  value={selSearch} onChange={(e) => setSelSearch(e.target.value)} sx={{ mb: 1 }}
+                />
+              )}
               <TableContainer sx={{ maxHeight: 'calc(100vh - 340px)' }}>
                 <Table stickyHeader size="small" sx={{ borderCollapse: 'collapse' }}>
                   <TableHead>
@@ -530,8 +543,8 @@ export default function TripSheetBills() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {groups.map((g) => {
-                      const open = expanded.has(g.key);
+                    {shownGroups.map((g) => {
+                      const open = expanded.has(g.key) || (Boolean(selQ) && billHit(g));
                       return [
                         <TableRow
                           key={g.key}
@@ -640,6 +653,11 @@ export default function TripSheetBills() {
                         )) : []),
                       ];
                     })}
+                    {groups.length > 0 && !shownGroups.length && (
+                      <TableRow>
+                        <TableCell colSpan={6} align="center" sx={{ ...cell, color: '#888' }}>No customer or bill matches "{selSearch.trim()}".</TableCell>
+                      </TableRow>
+                    )}
                     {!groups.length && (
                       <TableRow>
                         <TableCell colSpan={6} align="center" sx={{ ...cell, color: '#888' }}>
