@@ -34,6 +34,7 @@ export default function BranchBillMarking() {
   const [fromDate, setFromDate] = useState(today());
   const [toDate, setToDate] = useState(today());
   const [search, setSearch] = useState('');
+  const [transporter, setTransporter] = useState(null); // tpc_desc to show; null = all
   const [bills, setBills] = useState([]);
   const [sheets, setSheets] = useState([]);
   const [marks, setMarks] = useState({}); // bill key -> ts_code or null (what is on screen)
@@ -146,7 +147,19 @@ export default function BranchBillMarking() {
   });
   const pickSheet = (b, code) => setMarks((m) => ({ ...m, [billKey(b)]: code === '' ? '' : Number(code) }));
 
+  // Transporters of the loaded bills, for the filter: [{ name, count }] by name ('' = bills without one)
+  const transporters = useMemo(() => {
+    const counts = new Map();
+    bills.forEach((b) => counts.set(b.tpc_desc || '', (counts.get(b.tpc_desc || '') || 0) + 1));
+    return [...counts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [bills]);
+  // A transporter no longer in the bills (other branch or dates) goes back to all
+  useEffect(() => {
+    if (transporter !== null && !transporters.some((x) => x.name === transporter)) setTransporter(null);
+  }, [transporters]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const shown = bills.filter((b) => {
+    if (transporter !== null && (b.tpc_desc || '') !== transporter) return false;
     const q = search.trim().toLowerCase();
     return !q || String(b.smc_no).toLowerCase().includes(q) || String(b.cuc_desc).toLowerCase().includes(q);
   });
@@ -238,9 +251,24 @@ export default function BranchBillMarking() {
               <MenuItem key={branchKey(b)} value={branchKey(b)}>{b.company_branch} ({b.company_branch_code})</MenuItem>
             ))}
           </TextField>
+          {/* Transporters of the loaded bills, with their bill counts */}
+          <TextField
+            select size="small" label="Transporter" sx={{ minWidth: 220 }}
+            value={transporter === null ? '__all__' : transporter}
+            onChange={(e) => setTransporter(e.target.value === '__all__' ? null : e.target.value)}
+            SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }}
+          >
+            <MenuItem value="__all__">All transporters</MenuItem>
+            {transporters.map((x) => (
+              <MenuItem key={x.name || '(none)'} value={x.name}>
+                {x.name || '(no transporter)'}
+                <Box component="span" sx={{ ml: 1, color: '#888', fontSize: 13 }}>{x.count}</Box>
+              </MenuItem>
+            ))}
+          </TextField>
           <TextField size="small" placeholder="Bill no or customer" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ flex: 1, minWidth: 180 }} />
           <Typography variant="body2" color="text.secondary">
-            {bills.length} bills{dirty && <Box component="span" sx={{ color: '#c77700', fontWeight: 600 }}> · {changes.length} not saved</Box>}
+            {shown.length !== bills.length ? `${shown.length} of ` : ''}{bills.length} bills{dirty && <Box component="span" sx={{ color: '#c77700', fontWeight: 600 }}> · {changes.length} not saved</Box>}
           </Typography>
         </Paper>
 
