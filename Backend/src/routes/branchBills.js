@@ -3,12 +3,28 @@
 // Saving puts the marked bills on their trip sheets (trip_sheet_bills, as Trip Sheet - Bill Details does) and takes
 // unmarked ones off; sheets that are closed, cancelled, bills-complete or open in Trip Sheet - Bill Details on
 // another page are not changed.
+// One page at a time per branch: choosing a branch takes it (POST/DELETE /:branch/lock, branch = 'company~ba');
+// another page may still look at the branch's bills but not save marking for it.
 const express = require('express');
 const pool = require('../config/db');
 const { CUSTOMER_NAME } = require('../db/sheetBills');
-const { otherHolder, busyMessage } = require('../db/recordLock');
+const { otherHolder, busyMessage, lockRoutes, openRecords } = require('../db/recordLock');
 
 const router = express.Router();
+const LOCK_TYPE = 'branch_bills';
+const lockKey = (company, branch) => `${company}~${branch}`;
+const SCREEN = 'Branch Wise Bill Marking';
+
+lockRoutes(router, {
+  type: LOCK_TYPE,
+  param: 'branch',
+  screen: SCREEN,
+  describe: async (id) => {
+    const [company, branch] = String(id).split('~');
+    const [[row]] = await pool.query('SELECT company_branch FROM view_branch_list WHERE company_code = ? AND ba_code = ?', [company, branch]);
+    return row ? `Branch ${row.company_branch}` : null;
+  },
+});
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // The customer a bill belongs to (a manual bill may be entered for another company - branch than the customer's)
 const CU_CO = 'COALESCE(s.cu_company_code, s.company_code)';
@@ -30,7 +46,9 @@ const mayUse = (branches, company, branch) => branches.some((b) => b.company_cod
 
 router.get('/branches', async (req, res, next) => {
   try {
-    res.json(await userBranches(req.user));
+    // with who has each branch open on another page (open_by)
+    const [branches, open] = await Promise.all([userBranches(req.user), openRecords(LOCK_TYPE)]);
+    res.json(branches.map((b) => ({ ...b, open_by: open[lockKey(b.company_code, b.ba_code)] || null })));
   } catch (err) {
     next(err);
   }
@@ -119,6 +137,14 @@ router.post('/save', async (req, res, next) => {
     const branches = await userBranches(req.user);
     const notMine = changes.find((c) => !mayUse(branches, c.company_code, c.ba_code));
     if (notMine) return res.status(403).json({ message: 'A bill of a branch not given to you cannot be changed' });
+    // A branch open on another page is marked there only
+    for (const key of new Set(changes.map((c) => lockKey(c.company_code, c.ba_code)))) {
+      const holder = await otherHolder(LOCK_TYPE, key, req.get('X-Record-Lock'));
+      if (holder) {
+        const b = branches.find((x) => lockKey(x.company_code, x.ba_code) === key);
+        return res.status(409).json({ message: busyMessage(`Branch ${b ? b.company_branch : key}`, holder, SCREEN) });
+      }
+    }
 
     await conn.beginTransaction();
     const keys = changes.map((c) => [c.company_code, c.ba_code, c.sm_slno]);

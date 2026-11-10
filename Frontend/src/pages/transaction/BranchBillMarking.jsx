@@ -8,6 +8,7 @@ import {
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
 import { useConfirm } from '../../components/ConfirmDialog';
+import useRecordLock from '../../components/useRecordLock';
 import api, { errorMessage } from '../../api';
 
 const BORDER = '1px solid #d5d8e0';
@@ -18,6 +19,7 @@ const dateSx = { width: 165 };
 
 const billKey = (b) => `${b.company_code}|${b.ba_code}|${b.sm_slno}`;
 const branchKey = (b) => `${b.company_code}|${b.ba_code}`;
+const lockKeyOf = (key) => key.replace('|', '~'); // the branch's id for its lock
 const money = (v) => (v == null ? '—' : Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const showDate = (d) => (d ? d.split('-').reverse().join('-') : '');
 const today = () => {
@@ -28,6 +30,7 @@ const today = () => {
 // Branch Wise Bill Marking: the bills of one of the user's branches for a bill date range. Tick a bill to put it on
 // a trip sheet (the sheet of the customer's route in Trip Route Wise Customers is filled in); untick to take it off.
 // The right side shows the marking: trip sheet > customer > bills. Save writes it to the trip sheets.
+// One page at a time per branch: choosing a branch takes it; a branch open on another page is shown read-only.
 export default function BranchBillMarking() {
   const [branches, setBranches] = useState(null);
   const [branch, setBranch] = useState('');
@@ -45,6 +48,17 @@ export default function BranchBillMarking() {
   const [reloadKey, setReloadKey] = useState(0);
   const [keepMarks, setKeepMarks] = useState(false); // reload after Get Latest Bills: keep unsaved ticks
   const [confirm, confirmDialog] = useConfirm();
+  const [heldBranch, setHeldBranch] = useState(null); // branch key this page holds
+  const [lockMsg, setLockMsg] = useState(''); // the branch is open on another page: why it is read-only here
+  const { take: takeBranchLock, release: releaseBranchLock } = useRecordLock(
+    '/branch-bills',
+    heldBranch ? lockKeyOf(heldBranch) : null,
+    (message) => {
+      setHeldBranch(null);
+      setLockMsg(`${message} Unsaved marking on this page can't be saved.`);
+    },
+  );
+  const readOnly = Boolean(lockMsg);
   const [opened, setOpened] = useState(new Set()); // tree rows open on the right ('s:<sheet>', 'c:<sheet>:<customer>'); all closed at first
   const toggleRow = (key) => setOpened((s) => {
     const next = new Set(s);
@@ -78,6 +92,17 @@ export default function BranchBillMarking() {
     const [company_code, ba_code] = branch.split('|');
     run('Loading the bills…', async () => {
       try {
+        const got = await takeBranchLock(lockKeyOf(branch));
+        if (got.ok) {
+          setHeldBranch(branch);
+          setLockMsg('');
+        } else {
+          releaseBranchLock();
+          setHeldBranch(null);
+          setLockMsg(got.message);
+        }
+        // who has which branch open, for the Branch list
+        api.get('/branch-bills/branches').then(({ data }) => setBranches(data)).catch(() => {});
         const [b, s] = await Promise.all([
           api.get('/branch-bills/bills', { params: { company_code, ba_code, from: fromDate, to: toDate } }),
           api.get('/branch-bills/sheets', { params: { company_code, ba_code } }),
@@ -140,12 +165,12 @@ export default function BranchBillMarking() {
   };
 
   // Ticking: the sheet of the customer's route (if it can take bills of this branch), else the user picks one
-  const tick = (b, on) => setMarks((m) => {
+  const tick = (b, on) => !readOnly && setMarks((m) => {
     if (!on) return { ...m, [billKey(b)]: null };
     const suggested = b.suggested.find((code) => sheetByCode.has(code));
     return { ...m, [billKey(b)]: suggested || (b.sheet_code && sheetByCode.has(b.sheet_code) ? b.sheet_code : '') };
   });
-  const pickSheet = (b, code) => setMarks((m) => ({ ...m, [billKey(b)]: code === '' ? '' : Number(code) }));
+  const pickSheet = (b, code) => !readOnly && setMarks((m) => ({ ...m, [billKey(b)]: code === '' ? '' : Number(code) }));
 
   // Transporters of the loaded bills, for the filter: [{ name, count }] by name ('' = bills without one)
   const transporters = useMemo(() => {
@@ -228,7 +253,7 @@ export default function BranchBillMarking() {
     <Box>
       <ActionBar
         left={[
-          { label: busy === 'Saving…' ? 'Saving…' : 'Save', icon: <Save />, onClick: save, disabled: !dirty || Boolean(busy) },
+          { label: busy === 'Saving…' ? 'Saving…' : 'Save', icon: <Save />, onClick: save, disabled: !dirty || readOnly || Boolean(busy) },
           { label: 'Refresh', icon: <Refresh />, onClick: guard(() => setReloadKey((k) => k + 1)), disabled: !branch || Boolean(busy) },
           { label: 'Get Latest Bills', icon: <CloudDownload />, onClick: getLatestBills, disabled: !branch || Boolean(busy) },
         ]}
@@ -236,6 +261,11 @@ export default function BranchBillMarking() {
       <Box sx={{ p: 2.5 }}>
         <Typography variant="h5" mb={2}>Branch Wise Bill Marking</Typography>
         {error && <Alert severity="error" onClose={() => setError('')} sx={{ mb: 2 }}>{error}</Alert>}
+        {lockMsg && (
+          <Alert severity="warning" icon={<LockOutlined />} sx={{ mb: 2 }}>
+            {lockMsg} The bills are shown here for viewing only. Press Refresh to try again.
+          </Alert>
+        )}
 
         <Paper variant="outlined" sx={{ p: 2, mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
           <TextField
@@ -248,7 +278,12 @@ export default function BranchBillMarking() {
           />
           <TextField select size="small" label="Branch" value={branch} sx={{ minWidth: 300 }} onChange={(e) => guard(setBranch)(e.target.value)}>
             {(branches || []).map((b) => (
-              <MenuItem key={branchKey(b)} value={branchKey(b)}>{b.company_branch} ({b.company_branch_code})</MenuItem>
+              <MenuItem key={branchKey(b)} value={branchKey(b)}>
+                {b.company_branch} ({b.company_branch_code})
+                {b.open_by && branchKey(b) !== heldBranch && (
+                  <Box component="span" sx={{ ml: 1, color: '#c77700', fontSize: 13 }}>· open by {b.open_by}</Box>
+                )}
+              </MenuItem>
             ))}
           </TextField>
           {/* Transporters of the loaded bills, with their bill counts */}
@@ -287,7 +322,7 @@ export default function BranchBillMarking() {
                     <TableCell sx={{ ...head, textAlign: 'center', width: 70 }} padding="checkbox">
                       <Tooltip title={allTicked ? 'Untick all shown' : 'Tick all shown'}>
                         <Checkbox
-                          size="small" checked={allTicked} disabled={!selectable.length}
+                          size="small" checked={allTicked} disabled={readOnly || !selectable.length}
                           indeterminate={!allTicked && selectable.some((b) => marks[billKey(b)] != null)}
                           onChange={(e) => selectable.forEach((b) => tick(b, e.target.checked))}
                         />
@@ -324,7 +359,7 @@ export default function BranchBillMarking() {
                               <LockOutlined fontSize="small" sx={{ color: '#9aa0ab' }} />
                             </Tooltip>
                           ) : (
-                            <Checkbox size="small" checked={on} onChange={(e) => tick(b, e.target.checked)} />
+                            <Checkbox size="small" checked={on} disabled={readOnly} onChange={(e) => tick(b, e.target.checked)} />
                           )}
                         </TableCell>
                         <TableCell sx={cell}>
@@ -332,7 +367,7 @@ export default function BranchBillMarking() {
                             <Typography variant="body2">{b.sheet_no}</Typography>
                           ) : on ? (
                             <TextField
-                              select size="small" fullWidth value={code} onChange={(e) => pickSheet(b, e.target.value)}
+                              select size="small" fullWidth value={code} disabled={readOnly} onChange={(e) => pickSheet(b, e.target.value)}
                               error={code === ''} placeholder="Choose"
                               SelectProps={{ displayEmpty: true }}
                             >
