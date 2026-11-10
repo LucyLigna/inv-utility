@@ -4,7 +4,7 @@ import {
   TableFooter, TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import {
-  AddCircleOutline, AddLocationAlt, CheckCircle, EditOutlined, NoteAdd, LockOpenOutlined, TaskAlt, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PlayArrow, PlaylistAdd, Refresh,
+  AddCircleOutline, AddLocationAlt, CheckCircle, EditOutlined, NoteAdd, LockOpenOutlined, TaskAlt, CloudDownload, DeleteOutline, Download, Print, DragIndicator, KeyboardArrowDown, KeyboardArrowRight, PlaylistAdd, Refresh, Visibility,
   Save, Sort, SubdirectoryArrowRight, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
 import ActionBar from '../../components/ActionBar';
@@ -53,7 +53,7 @@ function NotOnRoute({ canMap, onMap }) {
 export default function TripSheetBills() {
   const [sheets, setSheets] = useState([]);
   const [picked, setPicked] = useState(null); // sheet chosen in the box
-  const [sheet, setSheet] = useState(null); // sheet loaded by Process
+  const [sheet, setSheet] = useState(null); // sheet opened with View or Edit
   const [selected, setSelected] = useState(new Map()); // bill key -> bill
   const [savedKey, setSavedKey] = useState('');
   const [expanded, setExpanded] = useState(new Set()); // customer groups whose bills are shown; none by default
@@ -69,7 +69,7 @@ export default function TripSheetBills() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [syncing, setSyncing] = useState(false);
-  const [busy, setBusy] = useState(''); // message shown while the server works (Process, Save, Complete, print...)
+  const [busy, setBusy] = useState(''); // message shown while the server works (View, Edit, Save, Complete, print...)
   const run = async (message, work) => {
     setBusy(message);
     try {
@@ -118,12 +118,19 @@ export default function TripSheetBills() {
     }
   };
 
-  // One page at a time per trip sheet (see useRecordLock): Process takes the sheet; if another page takes it
-  // over (e.g. this PC slept), the sheet is closed here and the user told why
-  const { take: takeSheetLock, lockedCode } = useRecordLock('/trip-sheet-bills', sheet?.code ?? null, (message) => {
-    setSheet(null);
-    setError(`${message} Your unsaved changes on this page were not saved.`);
-  });
+  // View opens a sheet read-only and takes nothing. Edit takes the sheet (one page at a time, see useRecordLock);
+  // only then can bills be added, removed, reordered or saved. If another page takes it over (e.g. this PC slept),
+  // this page goes back to viewing and the user is told why.
+  const [editing, setEditing] = useState(false);
+  const canEdit = user.isAdmin || user.programs.includes('P0203');
+  const { take: takeSheetLock, release: releaseSheetLock, lockedCode } = useRecordLock(
+    '/trip-sheet-bills',
+    editing && sheet ? sheet.code : null,
+    (message) => {
+      setEditing(false);
+      setError(`${message} Your unsaved changes on this page were not saved; the sheet is open for viewing only.`);
+    },
+  );
   const takeLock = async (s) => {
     const result = await takeSheetLock(s.code);
     if (!result.ok) setError(result.message);
@@ -141,8 +148,11 @@ export default function TripSheetBills() {
   const dirty = Boolean(sheet) && snapshot(selected, customOrder) !== savedKey;
   // Bills marked complete: the sheet's bills can only be viewed, printed and exported
   const complete = Boolean(sheet?.bills_completed_at);
+  // Nothing on the sheet can be changed: viewing, or bills complete
+  const readOnly = complete || !editing;
 
-  const process = async (s = picked) => {
+  // Opens a sheet: edit = take it for changes, otherwise view it (and give up any sheet this page holds)
+  const process = async (s = picked, edit = false) => {
     if (!s) return;
     if (dirty && !(await confirm({
       message: "Any bills you've added or removed on this trip sheet will be lost. This can't be undone.",
@@ -150,12 +160,17 @@ export default function TripSheetBills() {
       confirmLabel: 'Discard',
     }))) return;
     try {
-      const { data } = await run(`Loading ${s.tsc_no}…`, async () => {
-        if (!(await takeLock(s))) return { refused: true };
+      const { data } = await run(`${edit ? 'Opening' : 'Loading'} ${s.tsc_no}${edit ? ' for editing' : ''}…`, async () => {
+        if (edit) {
+          if (!(await takeLock(s))) return { refused: true };
+        } else {
+          releaseSheetLock();
+        }
         return api.get(`/trip-sheet-bills/${s.code}`);
       });
       loadSheets();
-      if (!data) return; // another page has it open (the message is shown)
+      if (!data) return; // another page is editing it (the message is shown)
+      setEditing(edit);
       const map = new Map(data.bills.map((b) => [billKey(b), b]));
       // Bills come in their saved order; keep the customers in that order if it was saved
       const order = savedOrder(data.bills);
@@ -176,7 +191,7 @@ export default function TripSheetBills() {
 
   // Bills that can be added, reloaded when the sheet or a filter changes
   useEffect(() => {
-    if (!sheet) return undefined;
+    if (!sheet || !editing) return undefined;
     const timer = setTimeout(async () => {
       setLoadingBills(true);
       try {
@@ -191,7 +206,7 @@ export default function TripSheetBills() {
       }
     }, search ? 350 : 0);
     return () => clearTimeout(timer);
-  }, [sheet, customers, transport, search, fromDate, toDate, reloadKey]);
+  }, [sheet, editing, customers, transport, search, fromDate, toDate, reloadKey]);
 
   // Runs the customer and salesdetails syncs now (instead of waiting for the half-hourly schedule),
   // then reloads the bills list
@@ -415,11 +430,14 @@ export default function TripSheetBills() {
     <Box>
       <ActionBar
         left={[
-          { label: busy === 'Saving…' ? 'Saving…' : 'Save', icon: <Save />, onClick: save, disabled: !dirty || complete || Boolean(busy) },
+          editing
+            ? { label: 'View only', icon: <Visibility />, onClick: () => process(sheet, false), disabled: !sheet || Boolean(busy) }
+            : { label: 'Edit', icon: <EditOutlined />, onClick: () => process(sheet, true), disabled: !sheet || !canEdit || Boolean(busy) },
+          { label: busy === 'Saving…' ? 'Saving…' : 'Save', icon: <Save />, onClick: save, disabled: !dirty || readOnly || Boolean(busy) },
           complete
-            ? { label: 'Reopen Bills', icon: <LockOpenOutlined />, onClick: reopenBills, disabled: !user.isAdmin || Boolean(busy) }
-            : { label: 'Mark Complete', icon: <TaskAlt />, onClick: markComplete, disabled: !sheet || !groups.length || Boolean(busy) },
-          { label: 'Refresh', icon: <Refresh />, onClick: () => process(sheet), disabled: !sheet || Boolean(busy) },
+            ? { label: 'Reopen Bills', icon: <LockOpenOutlined />, onClick: reopenBills, disabled: !user.isAdmin || !editing || Boolean(busy) }
+            : { label: 'Mark Complete', icon: <TaskAlt />, onClick: markComplete, disabled: !sheet || !editing || !groups.length || Boolean(busy) },
+          { label: 'Refresh', icon: <Refresh />, onClick: () => process(sheet, editing), disabled: !sheet || Boolean(busy) },
           { label: 'Print', icon: <Print />, onClick: (e) => setPrintMenu(e.currentTarget), disabled: !sheet || !groups.length || Boolean(busy) },
           {
             label: syncing ? 'Getting latest bills…' : 'Get Latest Bills',
@@ -458,11 +476,23 @@ export default function TripSheetBills() {
               renderInput={(params) => <TextField {...params} label="Trip Sheet" placeholder="Select a trip sheet" />}
             />
             <Button
-              variant="contained" size="large" disabled={!picked || Boolean(busy)} onClick={() => process()}
-              startIcon={busy.startsWith('Loading') ? <CircularProgress size={18} color="inherit" /> : <PlayArrow />}
+              variant="outlined" size="large" disabled={!picked || Boolean(busy)} onClick={() => process(picked, false)}
+              startIcon={busy.startsWith('Loading') ? <CircularProgress size={18} color="inherit" /> : <Visibility />}
             >
-              {busy.startsWith('Loading') ? 'Processing…' : 'Process'}
+              View
             </Button>
+            {canEdit && (
+              <Tooltip title="Open for adding, removing and saving bills (one page at a time)">
+                <span>
+                  <Button
+                    variant="contained" size="large" disabled={!picked || Boolean(busy)} onClick={() => process(picked, true)}
+                    startIcon={busy.startsWith('Opening') ? <CircularProgress size={18} color="inherit" /> : <EditOutlined />}
+                  >
+                    Edit
+                  </Button>
+                </span>
+              </Tooltip>
+            )}
           </Paper>
           {/* The processed sheet and its saved totals */}
           <Paper variant="outlined" sx={{ p: 1.5, flex: 1, minWidth: 280 }}>
@@ -478,6 +508,7 @@ export default function TripSheetBills() {
                   ['Driver', sheet.driver_name],
                   ['Saved', `${sheet.total_bills} bills · ${sheet.total_pack_qty} cases`],
                   ['Bills', complete ? `Complete ${showDate(sheet.bills_completed_at.slice(0, 10))} ${sheet.bills_completed_at.slice(11)}` : 'Open'],
+                  ['Mode', editing ? 'Editing' : 'Viewing'],
                 ].map(([label, value]) => (
                   <Box key={label}>
                     <Box sx={{ color: '#666', fontSize: 12 }}>{label}</Box>
@@ -486,7 +517,7 @@ export default function TripSheetBills() {
                 ))}
               </Box>
             ) : (
-              <Typography variant="body2" color="text.secondary">Select a trip sheet and press Process.</Typography>
+              <Typography variant="body2" color="text.secondary">Select a trip sheet and press View, or Edit to change its bills.</Typography>
             )}
           </Paper>
         </Box>
@@ -501,7 +532,7 @@ export default function TripSheetBills() {
                   {dirty && <Box component="span" sx={{ color: '#c77700', fontWeight: 400 }}> · not saved</Box>}
                 </Typography>
                 <Box>
-                  {!inRouteOrder && !complete && (
+                  {!inRouteOrder && !readOnly && (
                     <Tooltip title="Put the customers back in the order of Trip Route Wise Customers">
                       <Button size="small" startIcon={<Sort />} onClick={() => setCustomOrder(null)}>Route order</Button>
                     </Tooltip>
@@ -520,6 +551,8 @@ export default function TripSheetBills() {
               <Typography variant="body2" color="text.secondary" mb={1}>
                 {complete
                   ? 'Bills are complete: they can be viewed, printed and exported, but not changed.'
+                  : !editing
+                    ? 'Viewing only: press Edit to add, remove or reorder bills.'
                   : inRouteOrder
                     ? 'In the order of Trip Route Wise Customers. Drag the grip on a customer to change the order for this trip sheet.'
                     : 'In your order for this trip sheet. Drag the grip on a customer to change it.'}
@@ -549,13 +582,13 @@ export default function TripSheetBills() {
                         <TableRow
                           key={g.key}
                           hover
-                          onDragOver={(e) => !complete && e.preventDefault()}
-                          onDrop={() => { if (!complete) moveGroup(dragKey, g.key); setDragKey(null); }}
+                          onDragOver={(e) => !readOnly && e.preventDefault()}
+                          onDrop={() => { if (!readOnly) moveGroup(dragKey, g.key); setDragKey(null); }}
                           sx={{ bgcolor: dragKey === g.key ? '#e3e8f8' : '#f8f9fc' }}
                         >
                           <TableCell sx={{ ...cell, fontWeight: 700 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                              {!complete && (
+                              {!readOnly && (
                               <Box
                                 draggable
                                 onDragStart={(e) => { setDragKey(g.key); e.dataTransfer.setDragImage(e.currentTarget.closest('tr'), 20, 20); }}
@@ -608,7 +641,7 @@ export default function TripSheetBills() {
                           <TableCell sx={{ ...num, fontWeight: 700 }}>{g.cases}</TableCell>
                           <TableCell sx={{ ...num, fontWeight: 700 }}>{g.bills.length}</TableCell>
                           <TableCell sx={{ ...cell, py: 0 }} align="center">
-                            {!complete && (
+                            {!readOnly && (
                               <Tooltip title="Remove all bills of this customer">
                                 <IconButton size="small" onClick={() => removeBills(g.bills)}><DeleteOutline fontSize="small" /></IconButton>
                               </Tooltip>
@@ -619,8 +652,8 @@ export default function TripSheetBills() {
                           <TableRow
                             key={billKey(b)}
                             hover
-                            onDragOver={(e) => !complete && e.preventDefault()}
-                            onDrop={() => { if (!complete) moveGroup(dragKey, g.key); setDragKey(null); }}
+                            onDragOver={(e) => !readOnly && e.preventDefault()}
+                            onDrop={() => { if (!readOnly) moveGroup(dragKey, g.key); setDragKey(null); }}
                           >
                             <TableCell sx={{ ...cell, pl: 7 }} colSpan={2}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -630,7 +663,7 @@ export default function TripSheetBills() {
                                 {b.cuc_desc !== g.name && <Box component="span" sx={{ fontSize: 13 }}>· {b.cuc_desc}</Box>}
                                 <Box component="span" sx={{ color: '#666', fontSize: 13 }}>({b.company_branch})</Box>
                                 {b.is_manual ? <Chip size="small" label="Manual" sx={{ height: 18, fontSize: 11 }} /> : null}
-                                {b.is_manual && !complete ? (
+                                {b.is_manual && !readOnly ? (
                                   <Tooltip title="Edit this manual bill">
                                     <IconButton size="small" sx={{ p: 0.25 }} onClick={() => setEditingBill(b)} aria-label="edit manual bill">
                                       <EditOutlined fontSize="small" />
@@ -643,7 +676,7 @@ export default function TripSheetBills() {
                             <TableCell sx={num}>{b.pack_qty}</TableCell>
                             <TableCell sx={num}>1</TableCell>
                             <TableCell sx={{ ...cell, py: 0 }} align="center">
-                              {!complete && (
+                              {!readOnly && (
                                 <Tooltip title="Remove this bill">
                                   <IconButton size="small" onClick={() => removeBills([b])}><DeleteOutline fontSize="small" /></IconButton>
                                 </Tooltip>
@@ -683,7 +716,14 @@ export default function TripSheetBills() {
             </Paper>
 
             {/* Right: bills to add; ones already on the sheet are not shown. A completed sheet takes no more bills. */}
-            {complete ? (
+            {!editing && !complete ? (
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Alert severity="info" icon={<Visibility />}>
+                  <b>Viewing only.</b> Others can open this trip sheet too.
+                  {canEdit ? ' Press Edit to add or remove bills; it is then open for editing on this page only.' : ' You may view this trip sheet but not change its bills.'}
+                </Alert>
+              </Paper>
+            ) : complete ? (
               <Paper variant="outlined" sx={{ p: 2 }}>
                 <Alert severity="success" icon={<TaskAlt />}>
                   <b>Bills complete</b> since {showDate(sheet.bills_completed_at.slice(0, 10))} {sheet.bills_completed_at.slice(11)}

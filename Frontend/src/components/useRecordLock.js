@@ -71,5 +71,11 @@ export default function useRecordLock(basePath, openCode, onLost) {
     return { ok: true };
   };
 
-  return { take, lockedCode };
+  // Give the record up now (e.g. switching from editing to viewing)
+  const release = () => {
+    if (lockedCode.current != null) releaseLock(basePath, lockedCode.current, lockId.current, lockToken.current);
+    lockedCode.current = null;
+  };
+
+  return { take, release, lockedCode };
 }
