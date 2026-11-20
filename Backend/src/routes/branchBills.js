@@ -60,8 +60,9 @@ router.get('/sheets', async (req, res, next) => {
   try {
     if (!mayUse(await userBranches(req.user), company, branch)) return res.status(403).json({ message: 'This branch is not given to you' });
     const [rows] = await pool.query(
-      `SELECT s.ts_code AS code, s.tsc_no, s.trip_code, r.name AS route_name, DATE_FORMAT(s.loading_date, '%Y-%m-%d') AS loading_date
-       FROM trip_sheet s JOIN trip_route r ON r.code = s.trip_code
+      `SELECT s.ts_code AS code, s.tsc_no, s.trip_code, r.name AS route_name, DATE_FORMAT(s.loading_date, '%Y-%m-%d') AS loading_date,
+         d.name AS driver_name
+       FROM trip_sheet s JOIN trip_route r ON r.code = s.trip_code LEFT JOIN driver d ON d.code = s.driver_code
        WHERE s.status = 'Active' AND s.bills_completed_at IS NULL
          AND EXISTS (SELECT 1 FROM trip_route_branches b WHERE b.trip_code = s.trip_code AND b.company_code = ? AND b.ba_code = ? AND b.status = 'Active')
        ORDER BY s.ts_code DESC`,
@@ -95,7 +96,7 @@ router.get('/bills', async (req, res, next) => {
     const [rows] = await pool.query(
       `SELECT s.company_code, s.ba_code, s.sm_slno, s.smc_no, DATE_FORMAT(COALESCE(s.smd_date, DATE(s.inp_dt_tm)), '%Y-%m-%d') AS bill_date,
          s.cu_code, ${CU_CO} AS cust_company_code, ${CU_BA} AS cust_ba_code, ${CUSTOMER_NAME} AS cuc_desc, c.cuc_place, s.net_amount, s.pack_qty, s.tpc_desc, s.transporter_type, s.is_manual,
-         ts.ts_code AS sheet_code, ts.tsc_no AS sheet_no, ts.status AS sheet_status, ts.bills_completed_at IS NOT NULL AS sheet_complete,
+         ts.ts_code AS sheet_code, ts.tsc_no AS sheet_no, tb.pack_qty AS sheet_pack_qty, ts.status AS sheet_status, ts.bills_completed_at IS NOT NULL AS sheet_complete,
          (SELECT GROUP_CONCAT(x.ts_code ORDER BY x.ts_code DESC)
             FROM trip_route_customers t
             JOIN trip_sheet x ON x.trip_code = t.trip_code AND x.status = 'Active' AND x.bills_completed_at IS NULL

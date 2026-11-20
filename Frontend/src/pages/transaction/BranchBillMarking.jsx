@@ -4,8 +4,9 @@ import {
   TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
 import {
-  CloudDownload, KeyboardArrowDown, KeyboardArrowRight, LockOutlined, Refresh, Save, UnfoldLess, UnfoldMore,
+  CloudDownload, KeyboardArrowDown, KeyboardArrowRight, LockOutlined, Print, Refresh, Save, UnfoldLess, UnfoldMore,
 } from '@mui/icons-material';
+import BranchBillPrint from './BranchBillPrint';
 import ActionBar from '../../components/ActionBar';
 import { useConfirm } from '../../components/ConfirmDialog';
 import useRecordLock from '../../components/useRecordLock';
@@ -20,6 +21,8 @@ const dateSx = { width: 165 };
 const billKey = (b) => `${b.company_code}|${b.ba_code}|${b.sm_slno}`;
 const branchKey = (b) => `${b.company_code}|${b.ba_code}`;
 const lockKeyOf = (key) => key.replace('|', '~'); // the branch's id for its lock
+// A bill's cases on a trip sheet: as saved on that sheet (it may be changed in Trip Sheet - Bill Details), else the bill's
+const casesOf = (b, sheetCode) => (sheetCode === b.sheet_code && b.sheet_pack_qty != null ? b.sheet_pack_qty : b.pack_qty);
 const money = (v) => (v == null ? '—' : Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const showDate = (d) => (d ? d.split('-').reverse().join('-') : '');
 const today = () => {
@@ -59,6 +62,7 @@ export default function BranchBillMarking() {
     },
   );
   const readOnly = Boolean(lockMsg);
+  const [printing, setPrinting] = useState(null); // trip sheets being printed
   const [opened, setOpened] = useState(new Set()); // tree rows open on the right ('s:<sheet>', 'c:<sheet>:<customer>'); all closed at first
   const toggleRow = (key) => setOpened((s) => {
     const next = new Set(s);
@@ -220,11 +224,11 @@ export default function BranchBillMarking() {
       if (!s.customers.has(ck)) s.customers.set(ck, { key: ck, name: b.cuc_desc, place: b.cuc_place, bills: [], cases: 0, amount: 0 });
       const c = s.customers.get(ck);
       c.bills.push(b);
-      c.cases += Number(b.pack_qty) || 0;
+      c.cases += Number(casesOf(b, code)) || 0;
       c.amount += Number(b.net_amount) || 0;
       if (b.net_amount != null) c.hasAmount = true;
       s.bills += 1;
-      s.cases += Number(b.pack_qty) || 0;
+      s.cases += Number(casesOf(b, code)) || 0;
       s.amount += Number(b.net_amount) || 0;
       if (b.net_amount != null) s.hasAmount = true;
     });
@@ -239,6 +243,26 @@ export default function BranchBillMarking() {
   }, [bills, marks, sheetByCode]);
   const treeKeys = tree.flatMap((s) => [`s:${s.code}`, ...s.customers.map((c) => `c:${s.code}:${c.key}`)]);
   const allOpen = treeKeys.length > 0 && treeKeys.every((k) => opened.has(k));
+
+  // Trip sheet wise print of this branch's bills: one page per trip sheet (only what is saved)
+  const printSheets = (list) => {
+    setPrinting(list.map((s) => {
+      const info = sheetByCode.get(s.code);
+      return {
+        ...s,
+        name: sheetName(s.code, bills.find((x) => x.sheet_code === s.code)),
+        info: info && `Loading: ${showDate(info.loading_date)}${info.driver_name ? ` · Driver: ${info.driver_name}` : ''}`,
+      };
+    }));
+    setTimeout(() => window.print(), 150); // after the print block has rendered
+  };
+  useEffect(() => {
+    const done = () => setPrinting(null);
+    window.addEventListener('afterprint', done);
+    return () => window.removeEventListener('afterprint', done);
+  }, []);
+  const branchInfo = (branches || []).find((b) => branchKey(b) === branch);
+  const printTip = dirty ? 'Save the marking first' : '';
 
   if (branches && !branches.length) {
     return (
@@ -405,12 +429,21 @@ export default function BranchBillMarking() {
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
               <Typography sx={{ fontWeight: 700 }}>Trip sheets</Typography>
               {tree.length > 0 && (
-                <Button
-                  size="small" startIcon={allOpen ? <UnfoldLess /> : <UnfoldMore />}
-                  onClick={() => setOpened(allOpen ? new Set() : new Set(treeKeys))}
-                >
-                  {allOpen ? 'Collapse all' : 'Expand all'}
-                </Button>
+                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                  <Tooltip title={printTip || 'Print every trip sheet below, one page each, with this branch\'s bills'}>
+                    <span>
+                      <Button size="small" startIcon={<Print />} disabled={dirty || Boolean(busy)} onClick={() => printSheets(tree)}>
+                        Print all
+                      </Button>
+                    </span>
+                  </Tooltip>
+                  <Button
+                    size="small" startIcon={allOpen ? <UnfoldLess /> : <UnfoldMore />}
+                    onClick={() => setOpened(allOpen ? new Set() : new Set(treeKeys))}
+                  >
+                    {allOpen ? 'Collapse all' : 'Expand all'}
+                  </Button>
+                </Box>
               )}
             </Box>
             {!tree.length ? (
@@ -440,6 +473,13 @@ export default function BranchBillMarking() {
                               <Box component="span" sx={{ ml: 'auto', fontWeight: 400, fontSize: 12, color: '#555', whiteSpace: 'nowrap' }}>
                                 {s.customers.length} customer{s.customers.length === 1 ? '' : 's'} · {s.bills} bill{s.bills === 1 ? '' : 's'}
                               </Box>
+                              <Tooltip title={printTip || 'Print this trip sheet with this branch\'s bills'}>
+                                <span>
+                                  <IconButton size="small" sx={{ p: 0.25 }} disabled={dirty || Boolean(busy)} onClick={() => printSheets([s])} aria-label="print this trip sheet">
+                                    <Print fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
                             </Box>
                           </TableCell>
                           <TableCell sx={{ ...num, fontWeight: 700 }}>{money(s.hasAmount ? s.amount : null)}</TableCell>
@@ -475,7 +515,7 @@ export default function BranchBillMarking() {
                             >
                               <TableCell sx={{ ...cell, pl: 8, fontSize: 13 }}>{bill.smc_no}</TableCell>
                               <TableCell sx={{ ...num, fontSize: 13 }}>{money(bill.net_amount)}</TableCell>
-                              <TableCell sx={{ ...num, fontSize: 13 }}>{bill.pack_qty}</TableCell>
+                              <TableCell sx={{ ...num, fontSize: 13 }}>{casesOf(bill, s.code)}</TableCell>
                             </TableRow>,
                           ));
                         }
@@ -490,6 +530,11 @@ export default function BranchBillMarking() {
         </Box>
       </Box>
       {confirmDialog}
+      <BranchBillPrint
+        sheets={printing}
+        branch={branchInfo ? `${branchInfo.company_branch} (${branchInfo.company_branch_code})` : ''}
+        fromDate={fromDate} toDate={toDate} casesOf={casesOf}
+      />
       <Backdrop open={Boolean(busy)} sx={{ zIndex: (theme) => theme.zIndex.modal + 1, color: '#fff', flexDirection: 'column', gap: 2 }}>
         <CircularProgress color="inherit" />
         <Typography sx={{ fontWeight: 600 }}>{busy}</Typography>
