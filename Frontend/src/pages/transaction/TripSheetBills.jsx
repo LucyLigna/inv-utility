@@ -251,7 +251,7 @@ export default function TripSheetBills() {
   });
   // Number of cases of a bill on this sheet ('' while typing; saved as 0 if left empty)
   const setCases = (b, value) => {
-    if (!/^d{0,5}$/.test(value)) return;
+    if (!/^\d{0,5}$/.test(value)) return;
     setSelected((m) => {
       const next = new Map(m);
       const cur = next.get(billKey(b));
