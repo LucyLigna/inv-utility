@@ -123,12 +123,22 @@ router.get('/:tsCode/available', async (req, res, next) => {
   }
 });
 
-// Replaces the sheet's bills and updates its totals. Body: { bills: [{ company_code, ba_code, sm_slno }] },
-// in delivery order; each bill's position is kept as its sort_order
+// Replaces the sheet's bills and updates its totals. Body: { bills: [{ company_code, ba_code, sm_slno, pack_qty? }] },
+// in delivery order; each bill's position is kept as its sort_order. pack_qty: the number of cases on this sheet
+// (changed in Selected Customer; the bill in salesdetails keeps its own). Left out: as on the sheet, else the bill's.
 router.put('/:tsCode', needLock, async (req, res, next) => {
   const keys = (Array.isArray(req.body.bills) ? req.body.bills : [])
     .map((b) => [String(b.company_code || '').trim(), String(b.ba_code || '').trim(), String(b.sm_slno || '').trim()])
     .filter((k) => k.every(Boolean));
+  const cases = new Map();
+  for (const b of Array.isArray(req.body.bills) ? req.body.bills : []) {
+    if (b.pack_qty == null || b.pack_qty === '') continue;
+    const n = Number(b.pack_qty);
+    if (!Number.isInteger(n) || n < 0 || n > 99999) {
+      return res.status(400).json({ message: `Number of cases must be a whole number from 0 to 99999 (bill ${b.smc_no || b.sm_slno})` });
+    }
+    cases.set([b.company_code, b.ba_code, b.sm_slno].map((v) => String(v || '').trim()).join('|'), n);
+  }
   if (new Set(keys.map((k) => k.join('|'))).size !== keys.length) {
     return res.status(400).json({ message: 'A bill is listed twice' });
   }
@@ -174,12 +184,18 @@ router.put('/:tsCode', needLock, async (req, res, next) => {
     }
     // Bills already on the sheet keep who added them (and when); the saver becomes updated_by for all
     const [before] = await conn.query(
-      'SELECT company_code, ba_code, sm_slno, created_by, created_at FROM trip_sheet_bills WHERE ts_code = ?',
+      'SELECT company_code, ba_code, sm_slno, pack_qty, created_by, created_at FROM trip_sheet_bills WHERE ts_code = ?',
       [sheet.ts_code]
     );
     const added = new Map(before.map((b) => [`${b.company_code}|${b.ba_code}|${b.sm_slno}`, b]));
     await conn.query('DELETE FROM trip_sheet_bills WHERE ts_code = ?', [sheet.ts_code]);
     const me = req.user.user_code;
+    // Cases on the sheet: as sent, else as saved on the sheet before, else the bill's own
+    bills.forEach((b) => {
+      const k = `${b.company_code}|${b.ba_code}|${b.sm_slno}`;
+      const old = added.get(k);
+      b.pack_qty = cases.has(k) ? cases.get(k) : (old && old.pack_qty != null ? old.pack_qty : b.pack_qty);
+    });
     if (bills.length) {
       const position = new Map(keys.map((k, i) => [k.join('|'), i + 1]));
       await conn.query(

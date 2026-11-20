@@ -71,10 +71,11 @@ async function customerContacts(keys) {
   ]));
 }
 
-// The sheet's bills with their grouping, in the order saved on the sheet
+// The sheet's bills with their grouping, in the order saved on the sheet.
+// pack_qty: the number of cases on this sheet (it may be changed in Selected Customer); bill_pack_qty: the bill's own.
 async function sheetBills(sheet) {
   const [bills] = await pool.query(
-    `SELECT ${BILL_FIELDS}, tb.sort_order AS sheet_order
+    `SELECT ${BILL_FIELDS}, tb.sort_order AS sheet_order, tb.pack_qty AS sheet_pack_qty
      FROM trip_sheet_bills tb
      JOIN salesdetails s ON s.company_code = tb.company_code AND s.ba_code = tb.ba_code AND s.sm_slno = tb.sm_slno
      ${BILL_JOINS}
@@ -82,7 +83,7 @@ async function sheetBills(sheet) {
      ORDER BY tb.sort_order IS NULL, tb.sort_order`,
     [sheet.trip_code, sheet.trip_code, sheet.code]
   );
-  return bills;
+  return bills.map(({ sheet_pack_qty: onSheet, ...b }) => ({ ...b, bill_pack_qty: b.pack_qty, pack_qty: onSheet ?? b.pack_qty }));
 }
 
 module.exports = {

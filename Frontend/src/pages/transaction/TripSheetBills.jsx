@@ -27,8 +27,9 @@ const money = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDig
 const showDate = (d) => (d ? d.split('-').reverse().join('-') : '');
 const sheetLabel = (s) => `${s.tsc_no} · ${s.route_name} · ${showDate(s.loading_date)} (${(s.loading_day || '').slice(0, 3)})`;
 // What would be saved (bills in delivery order), as a string, to tell whether anything changed
+// The bills in order, with their number of cases (it can be changed on the sheet)
 const snapshot = (selected, customOrder) => JSON.stringify(
-  arrange(byCustomer([...selected.values()]), customOrder).flatMap((g) => g.bills.map(billKey))
+  arrange(byCustomer([...selected.values()]), customOrder).flatMap((g) => g.bills.map((b) => [billKey(b), Number(b.pack_qty) || 0]))
 );
 
 // A customer not on the sheet's route: a map icon; the tip says so, and clicking it (with the right to Trip Route
@@ -108,7 +109,11 @@ export default function TripSheetBills() {
         const { data } = await api.get(`/trip-sheet-bills/${sheet.code}/describe`, { params: { keys: keys.join(',') } });
         setSelected((m) => {
           const next = new Map(m);
-          data.forEach((b) => { if (next.has(billKey(b))) next.set(billKey(b), b); });
+          // keep the number of cases as it is on the sheet (it may have been changed)
+          data.forEach((b) => {
+            const old = next.get(billKey(b));
+            if (old) next.set(billKey(b), { ...b, pack_qty: old.pack_qty, bill_pack_qty: old.bill_pack_qty ?? b.pack_qty });
+          });
           return next;
         });
       }
@@ -244,6 +249,16 @@ export default function TripSheetBills() {
     bills.forEach((b) => next.set(billKey(b), b));
     return next;
   });
+  // Number of cases of a bill on this sheet ('' while typing; saved as 0 if left empty)
+  const setCases = (b, value) => {
+    if (!/^d{0,5}$/.test(value)) return;
+    setSelected((m) => {
+      const next = new Map(m);
+      const cur = next.get(billKey(b));
+      if (cur) next.set(billKey(b), { ...cur, pack_qty: value === '' ? '' : Number(value), bill_pack_qty: cur.bill_pack_qty ?? cur.pack_qty });
+      return next;
+    });
+  };
   const removeBills = (bills) => setSelected((m) => {
     const next = new Map(m);
     bills.forEach((b) => next.delete(billKey(b)));
@@ -272,7 +287,7 @@ export default function TripSheetBills() {
     if (onSheet) {
       setSheet(result.sheet);
       // Already saved on this sheet: unless other changes are waiting, there is nothing left to save
-      setSavedKey(wasClean ? snapshot(next, customOrder) : savedKey.replace(JSON.stringify(oldKey), JSON.stringify(billKey(bill))));
+      setSavedKey(wasClean ? snapshot(next, customOrder) : savedKey.split(JSON.stringify(oldKey)).join(JSON.stringify(billKey(bill))));
     }
     setReloadKey((k) => k + 1);
     setNotice(`Manual bill ${bill.smc_no} saved`);
@@ -298,9 +313,10 @@ export default function TripSheetBills() {
 
   const save = async () => {
     try {
-      const bills = groups.flatMap((g) => g.bills).map(({ company_code, ba_code, sm_slno }) => ({ company_code, ba_code, sm_slno }));
+      const bills = groups.flatMap((g) => g.bills).map(({ company_code, ba_code, sm_slno, smc_no, pack_qty }) => ({ company_code, ba_code, sm_slno, smc_no, pack_qty: Number(pack_qty) || 0 }));
       const { data } = await run('Saving…', () => api.put(`/trip-sheet-bills/${sheet.code}`, { bills }));
       setSavedKey(snapshot(selected, customOrder));
+      setSelected((m) => new Map([...m].map(([k, b]) => [k, b.pack_qty === '' ? { ...b, pack_qty: 0 } : b])));
       setSheet({ ...sheet, total_bills: data.total_bills, total_pack_qty: data.total_pack_qty });
       setNotice(`Saved ${data.total_bills} bills (${data.total_pack_qty} cases) on ${sheet.tsc_no}`);
       loadSheets();
@@ -681,7 +697,20 @@ export default function TripSheetBills() {
                               </Box>
                             </TableCell>
                             <TableCell sx={{ ...num, color: '#444' }}>{b.net_amount == null ? '—' : `₹ ${money(b.net_amount)}`}</TableCell>
-                            <TableCell sx={num}>{b.pack_qty}</TableCell>
+                            <TableCell sx={{ ...num, py: readOnly ? undefined : 0.25 }}>
+                              {readOnly ? b.pack_qty : (
+                                <TextField
+                                  size="small" variant="standard" value={b.pack_qty ?? ''}
+                                  onChange={(e) => setCases(b, e.target.value)}
+                                  inputProps={{ inputMode: 'numeric', 'aria-label': `number of cases of bill ${b.smc_no}`, style: { textAlign: 'right', padding: '2px 0', width: 56 } }}
+                                />
+                              )}
+                              {b.bill_pack_qty != null && Number(b.bill_pack_qty) !== Number(b.pack_qty) && (
+                                <Tooltip title="Number of cases on the bill; it was changed on this trip sheet">
+                                  <Box sx={{ color: '#c77700', fontSize: 12 }}>bill: {b.bill_pack_qty}</Box>
+                                </Tooltip>
+                              )}
+                            </TableCell>
                             <TableCell sx={num}>1</TableCell>
                             <TableCell sx={{ ...cell, py: 0 }} align="center">
                               {!readOnly && (
