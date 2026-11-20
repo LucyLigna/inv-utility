@@ -1,7 +1,8 @@
 import { createPortal } from 'react-dom';
 import { GlobalStyles } from '@mui/material';
 
-// Branch Wise Bill Marking: one page per trip sheet with this branch's bills on it, customers in route order.
+// Branch Wise Bill Marking: each trip sheet (one after another, no page break) with this branch's bills on it,
+// customers in route order.
 // Rendered straight into <body> and shown only while printing (like Trip Sheet - Bill Details' print).
 const printStyles = {
   '.branch-bill-print': { display: 'none' },
@@ -30,7 +31,8 @@ export default function BranchBillPrint({ sheets, branch, fromDate, toDate, case
         {sheets.map((s, si) => {
           let sl = 0;
           return (
-            <div key={s.code} style={si < sheets.length - 1 ? { breakAfter: 'page' } : undefined}>
+            // trip sheets follow one another (no page break), a gap between them
+            <div key={s.code} style={si < sheets.length - 1 ? { marginBottom: 24 } : undefined}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 10 }}>
                 <div>
                   <div style={{ fontSize: 18, fontWeight: 700 }}>Trip Sheet {s.name}</div>

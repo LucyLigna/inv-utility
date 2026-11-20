@@ -244,7 +244,7 @@ export default function BranchBillMarking() {
   const treeKeys = tree.flatMap((s) => [`s:${s.code}`, ...s.customers.map((c) => `c:${s.code}:${c.key}`)]);
   const allOpen = treeKeys.length > 0 && treeKeys.every((k) => opened.has(k));
 
-  // Trip sheet wise print of this branch's bills: one page per trip sheet (only what is saved)
+  // Trip sheet wise print of this branch's bills, the sheets one after another (only what is saved)
   const printSheets = (list) => {
     setPrinting(list.map((s) => {
       const info = sheetByCode.get(s.code);
@@ -430,7 +430,7 @@ export default function BranchBillMarking() {
               <Typography sx={{ fontWeight: 700 }}>Trip sheets</Typography>
               {tree.length > 0 && (
                 <Box sx={{ display: 'flex', gap: 0.5 }}>
-                  <Tooltip title={printTip || 'Print every trip sheet below, one page each, with this branch\'s bills'}>
+                  <Tooltip title={printTip || 'Print every trip sheet below with this branch\'s bills'}>
                     <span>
                       <Button size="small" startIcon={<Print />} disabled={dirty || Boolean(busy)} onClick={() => printSheets(tree)}>
                         Print all
