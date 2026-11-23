@@ -63,6 +63,7 @@ export default function BranchBillMarking() {
   );
   const readOnly = Boolean(lockMsg);
   const [printing, setPrinting] = useState(null); // trip sheets being printed
+  const [printPick, setPrintPick] = useState(new Set()); // trip sheets ticked for printing (codes)
   const [opened, setOpened] = useState(new Set()); // tree rows open on the right ('s:<sheet>', 'c:<sheet>:<customer>'); all closed at first
   const toggleRow = (key) => setOpened((s) => {
     const next = new Set(s);
@@ -261,6 +262,15 @@ export default function BranchBillMarking() {
     window.addEventListener('afterprint', done);
     return () => window.removeEventListener('afterprint', done);
   }, []);
+  // Trip sheets ticked for printing, in the tree's order (a sheet no longer in the tree drops out)
+  const picked = tree.filter((s) => printPick.has(s.code));
+  const allPicked = tree.length > 0 && picked.length === tree.length;
+  const togglePick = (code) => setPrintPick((p) => {
+    const next = new Set(p);
+    if (next.has(code)) next.delete(code);
+    else next.add(code);
+    return next;
+  });
   const branchInfo = (branches || []).find((b) => branchKey(b) === branch);
   const printTip = dirty ? 'Save the marking first' : '';
 
@@ -427,13 +437,24 @@ export default function BranchBillMarking() {
           {/* Right: what is marked, as a tree: trip sheet > customer (route order) > bills */}
           <Paper variant="outlined" sx={{ p: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-              <Typography sx={{ fontWeight: 700 }}>Trip sheets</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                {tree.length > 0 && (
+                  <Tooltip title={allPicked ? 'Untick all trip sheets' : 'Tick all trip sheets for printing'}>
+                    <Checkbox
+                      size="small" sx={{ p: 0.25 }} checked={allPicked} indeterminate={picked.length > 0 && !allPicked}
+                      onChange={() => setPrintPick(allPicked ? new Set() : new Set(tree.map((s) => s.code)))}
+                      inputProps={{ 'aria-label': 'tick all trip sheets for printing' }}
+                    />
+                  </Tooltip>
+                )}
+                <Typography sx={{ fontWeight: 700 }}>Trip sheets</Typography>
+              </Box>
               {tree.length > 0 && (
                 <Box sx={{ display: 'flex', gap: 0.5 }}>
-                  <Tooltip title={printTip || 'Print every trip sheet below with this branch\'s bills'}>
+                  <Tooltip title={printTip || (picked.length ? 'Print the ticked trip sheets with this branch\'s bills' : 'Tick the trip sheets to print')}>
                     <span>
-                      <Button size="small" startIcon={<Print />} disabled={dirty || Boolean(busy)} onClick={() => printSheets(tree)}>
-                        Print all
+                      <Button size="small" startIcon={<Print />} disabled={dirty || !picked.length || Boolean(busy)} onClick={() => printSheets(picked)}>
+                        Print selected{picked.length ? ` (${picked.length})` : ''}
                       </Button>
                     </span>
                   </Tooltip>
@@ -473,12 +494,11 @@ export default function BranchBillMarking() {
                               <Box component="span" sx={{ ml: 'auto', fontWeight: 400, fontSize: 12, color: '#555', whiteSpace: 'nowrap' }}>
                                 {s.customers.length} customer{s.customers.length === 1 ? '' : 's'} · {s.bills} bill{s.bills === 1 ? '' : 's'}
                               </Box>
-                              <Tooltip title={printTip || 'Print this trip sheet with this branch\'s bills'}>
-                                <span>
-                                  <IconButton size="small" sx={{ p: 0.25 }} disabled={dirty || Boolean(busy)} onClick={() => printSheets([s])} aria-label="print this trip sheet">
-                                    <Print fontSize="small" />
-                                  </IconButton>
-                                </span>
+                              <Tooltip title="Tick to print">
+                                <Checkbox
+                                  size="small" sx={{ p: 0.25 }} checked={printPick.has(s.code)}
+                                  onChange={() => togglePick(s.code)} inputProps={{ 'aria-label': 'tick to print this trip sheet' }}
+                                />
                               </Tooltip>
                             </Box>
                           </TableCell>
