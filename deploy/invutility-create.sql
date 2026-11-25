@@ -188,6 +188,21 @@ CREATE TABLE IF NOT EXISTS `sync_log` (
   KEY `ix_sync_log_job` (`job`,`started_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- sync_salesdetails_log: each bill received by a salesdetails sync run (sync_id = sync_log.id)
+CREATE TABLE IF NOT EXISTS `sync_salesdetails_log` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `sync_id` int NOT NULL,
+  `company_code` varchar(3) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `ba_code` varchar(4) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `sm_slno` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `net_amount` decimal(12,2) DEFAULT NULL,
+  `pack_qty` int DEFAULT NULL,
+  `received_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `ix_sync_salesdetails_log_sync` (`sync_id`),
+  KEY `ix_sync_salesdetails_log_bill` (`company_code`,`ba_code`,`sm_slno`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- sys_menufile
 CREATE TABLE IF NOT EXISTS `sys_menufile` (
   `menu_code` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,

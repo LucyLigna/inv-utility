@@ -52,6 +52,20 @@ async function saveBatch(name, job, rows) {
   }
 }
 
+// Stores the rows received in a batch against the run (job.receivedLog: { table, columns }). It must not stop
+// the sync: an error here is returned and noted on the run instead.
+async function logReceived(job, syncId, rows) {
+  if (!job.receivedLog) return null;
+  const { table, columns } = job.receivedLog;
+  try {
+    const values = rows.map((r) => [syncId, ...columns.map((c) => r[c.toUpperCase()] ?? null)]);
+    await pool.query(`INSERT INTO \`${table}\` (sync_id, ${columns.map((c) => `\`${c}\``).join(', ')}) VALUES ?`, [values]);
+    return null;
+  } catch (err) {
+    return `received rows not logged in ${table}: ${err.message}`;
+  }
+}
+
 async function runJob(name) {
   const job = jobs[name];
   if (!job) throw new Error(`Unknown sync job: ${name}`);
@@ -61,6 +75,7 @@ async function runJob(name) {
   const [log] = await pool.query("INSERT INTO sync_log (job, started_at, status) VALUES (?, NOW(), 'Running')", [name]);
   const stats = { batches: 0, saved: 0, failed: 0 };
   const seen = new Set();
+  let logError = null; // first failure to store the received rows (the sync itself carries on)
 
   try {
     for (;;) {
@@ -69,6 +84,7 @@ async function runJob(name) {
       stats.batches += 1;
 
       const result = await saveBatch(name, job, rows);
+      logError = logError || await logReceived(job, log.insertId, rows);
       stats.saved += result.saved;
       stats.failed += result.failed;
       await pool.query('UPDATE sync_log SET batches = ?, row_count = ? WHERE id = ?', [stats.batches, stats.saved, log.insertId]);
@@ -85,7 +101,8 @@ async function runJob(name) {
     // After a big load, refresh MySQL's row statistics so view_customer_list searches keep a fast join order
     if (stats.saved >= ANALYZE_AFTER_ROWS) await pool.query(`ANALYZE TABLE \`${job.table}\``);
 
-    const message = stats.failed ? `${stats.failed} rows failed; see sync_failed_row` : null;
+    const message = [stats.failed ? `${stats.failed} rows failed; see sync_failed_row` : null, logError]
+      .filter(Boolean).join('; ').slice(0, 1000) || null;
     await pool.query("UPDATE sync_log SET status = 'Success', finished_at = NOW(), message = ? WHERE id = ?", [message, log.insertId]);
     return { job: name, status: 'Success', ...stats };
   } catch (err) {

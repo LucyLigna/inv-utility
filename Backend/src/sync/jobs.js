@@ -60,6 +60,8 @@ module.exports = {
     intervalMinutes: 30,
     // Like customer, each call returns the next batch, so keep calling until it returns nothing
     loopUntilEmpty: true,
+    // Each bill received is also stored against its run (sync_log.id), to see what INV sent and when
+    receivedLog: { table: 'sync_salesdetails_log', columns: ['company_code', 'ba_code', 'sm_slno', 'net_amount', 'pack_qty'] },
     keys: ['company_code', 'ba_code', 'sm_slno'],
     columns: [
       'company_code', 'ba_code', 'sm_slno', 'cu_code', 'cuc_desc', 'roc_desc', 'smc_no', 'smd_date', 'tp_code', 'tpc_desc', 'transporter_type',
