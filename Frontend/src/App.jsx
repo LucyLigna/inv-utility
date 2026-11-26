@@ -15,6 +15,9 @@ import BranchBillMarking from './pages/transaction/BranchBillMarking';
 import Users from './pages/admin/Users';
 import UserLog from './pages/admin/UserLog';
 import DriverApp from './pages/driver/DriverApp';
+import Employee from './pages/attendance/Employee';
+import Kiosk from './pages/attendance/Kiosk';
+import AttendanceReport from './pages/attendance/AttendanceReport';
 
 const SCREENS = [
   ['/master/vehicle', <Vehicle />],
@@ -26,6 +29,9 @@ const SCREENS = [
   ['/transaction/branch-bill-marking', <BranchBillMarking />],
   ['/admin/users', <Users />],
   ['/admin/user-log', <UserLog />],
+  ['/attendance/employee', <Employee />],
+  ['/attendance/kiosk', <Kiosk />],
+  ['/attendance/report', <AttendanceReport />],
 ];
 
 // A screen opens only if the user has the right to it
