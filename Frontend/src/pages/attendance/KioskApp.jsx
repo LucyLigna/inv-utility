@@ -6,6 +6,7 @@ import { useAuth } from '../../auth';
 import { appServer } from '../../api';
 import Login from '../Login';
 import Kiosk from './Kiosk';
+import EnrolPicker from './EnrolPicker';
 import { SAFE_BOTTOM, SAFE_TOP } from '../driver/safeArea';
 
 // The Android attendance app (AttendanceApp/, built with vite.kiosk.config.js): log in once with a user who has the
@@ -14,6 +15,7 @@ import { SAFE_BOTTOM, SAFE_TOP } from '../driver/safeArea';
 export default function KioskApp() {
   const { user, checking, canOpen, signOut } = useAuth();
   const [askLogout, setAskLogout] = useState(false);
+  const [enrolMode, setEnrolMode] = useState(false);
 
   let page;
   if (checking) {
@@ -34,8 +36,12 @@ export default function KioskApp() {
         <Button variant="contained" onClick={signOut}>Log out</Button>
       </Box>
     );
+  } else if (enrolMode) {
+    // The kiosk (and its camera) is closed while enrolling: the front camera can't be used twice at once
+    page = <EnrolPicker onBack={() => setEnrolMode(false)} />;
   } else {
-    page = <Kiosk onLogout={() => setAskLogout(true)} />;
+    // Enrol Face only for users who may also change employees (the Employee right)
+    page = <Kiosk onLogout={() => setAskLogout(true)} onEnrol={canOpen('/attendance/employee') ? () => setEnrolMode(true) : undefined} />;
   }
 
   return (

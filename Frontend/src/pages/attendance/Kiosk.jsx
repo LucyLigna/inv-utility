@@ -3,7 +3,7 @@ import {
   Alert, Box, Button, CircularProgress, List, ListItem, ListItemText, Paper, Typography,
 } from '@mui/material';
 import {
-  Fullscreen, Login as InIcon, Logout as OutIcon, PowerSettingsNew, Replay, HelpOutline, Visibility,
+  Face, Fullscreen, Login as InIcon, Logout as OutIcon, PowerSettingsNew, Replay, HelpOutline, Visibility,
 } from '@mui/icons-material';
 import api, { errorMessage } from '../../api';
 import {
@@ -66,8 +66,9 @@ async function blinkCheck(faceapi, video, isAlive, wait, startBox) {
 // What the last missed blink check saw, for the note under "Blink not seen"
 let lastBlinkStats = null;
 
-// onLogout: shown as a Log out button (the Android kiosk app, which has no menu); on the web the menu has it
-export default function Kiosk({ onLogout }) {
+// onLogout: shown as a Log out button (the Android kiosk app, which has no menu); on the web the menu has it.
+// onEnrol: shown as an Enrol Face button (the app, for users with the Employee right)
+export default function Kiosk({ onLogout, onEnrol }) {
   const videoRef = useRef(null);
   const boxRef = useRef(null);
   const [hint, setHint] = useState('Starting…');
@@ -191,15 +192,16 @@ export default function Kiosk({ onLogout }) {
   const style = result && RESULT_STYLE[result.kind];
   return (
     <Box ref={boxRef} sx={{ p: 2.5, bgcolor: '#f4f6fb', minHeight: '100%' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 2 }}>
         <Typography variant="h5">Attendance Kiosk</Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 }, flexWrap: 'wrap' }}>
           <Typography sx={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
             {clock.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </Typography>
           {document.fullscreenEnabled && !onLogout && (
             <Button size="small" startIcon={<Fullscreen />} onClick={() => boxRef.current?.requestFullscreen?.()}>Full screen</Button>
           )}
+          {onEnrol && <Button size="small" variant="outlined" startIcon={<Face />} onClick={onEnrol}>Enrol Face</Button>}
           {onLogout && <Button size="small" color="inherit" startIcon={<PowerSettingsNew />} onClick={onLogout}>Log out</Button>}
         </Box>
       </Box>
