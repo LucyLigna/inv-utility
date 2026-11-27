@@ -9,5 +9,8 @@ dist
 .env
 logs
 
+# Database dumps (real customer, bill and user data)
+backup/
+
 # Personal Claude Code settings
 .claude/settings.local.json
