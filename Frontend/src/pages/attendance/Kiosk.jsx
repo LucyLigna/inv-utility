@@ -3,7 +3,7 @@ import {
   Alert, Box, Button, CircularProgress, List, ListItem, ListItemText, Paper, Typography,
 } from '@mui/material';
 import {
-  Face, Fullscreen, Login as InIcon, Logout as OutIcon, PowerSettingsNew, Replay, HelpOutline, Visibility,
+  Face, Fullscreen, Login as InIcon, Logout as OutIcon, Replay, HelpOutline, Visibility,
 } from '@mui/icons-material';
 import api, { errorMessage } from '../../api';
 import {
@@ -66,9 +66,13 @@ async function blinkCheck(faceapi, video, isAlive, wait, startBox) {
 // What the last missed blink check saw, for the note under "Blink not seen"
 let lastBlinkStats = null;
 
-// onLogout: shown as a Log out button (the Android kiosk app, which has no menu); on the web the menu has it.
-// onEnrol: shown as an Enrol Face button (the app, for users with the Employee right)
-export default function Kiosk({ onLogout, onEnrol }) {
+// The Android app's extras (on the web the kiosk runs under the user's login):
+//   kioskKey: the device's kiosk key, sent with each scan instead of a login
+//   onKeyRejected(message): the server no longer takes the key (switched off, or not set up)
+//   onEnrol: shown as an Enrol Face button (it asks for a login)
+export default function Kiosk({ kioskKey, onKeyRejected, onEnrol }) {
+  const keyRef = useRef({ kioskKey, onKeyRejected });
+  keyRef.current = { kioskKey, onKeyRejected };
   const videoRef = useRef(null);
   const boxRef = useRef(null);
   const [hint, setHint] = useState('Starting…');
@@ -163,7 +167,12 @@ export default function Kiosk({ onLogout, onEnrol }) {
           }
           setHint('Checking…');
           try {
-            const { data } = await api.post('/attendance/punch', { descriptor, device: deviceName() });
+            const { kioskKey: key } = keyRef.current;
+            const { data } = await api.post(
+              '/attendance/punch',
+              { descriptor, device: deviceName() },
+              key ? { headers: { Authorization: `Bearer ${key}` }, ownKey: true } : undefined,
+            );
             if (!data.matched) {
               // closest: how near the nearest enrolled face was (shown small, to help tune the match limit)
               const line = data.unsure ? 'Please look straight at the camera and try again' : 'Ask the office to enrol your face';
@@ -175,6 +184,10 @@ export default function Kiosk({ onLogout, onEnrol }) {
               await show({ kind: data.type, title: data.name, line: `${data.type === 'In' ? 'Welcome! In' : 'Goodbye! Out'} at ${data.time}` }, SHOW_RESULT_MS);
             }
           } catch (err) {
+            if (err.response?.status === 401 && err.response.data?.kiosk && keyRef.current.onKeyRejected) {
+              keyRef.current.onKeyRejected(errorMessage(err));
+              break;
+            }
             await show({ kind: 'unknown', title: 'Could not mark attendance', line: errorMessage(err) }, SHOW_RESULT_MS);
           }
         } else {
@@ -198,11 +211,10 @@ export default function Kiosk({ onLogout, onEnrol }) {
           <Typography sx={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
             {clock.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </Typography>
-          {document.fullscreenEnabled && !onLogout && (
+          {document.fullscreenEnabled && !kioskKey && (
             <Button size="small" startIcon={<Fullscreen />} onClick={() => boxRef.current?.requestFullscreen?.()}>Full screen</Button>
           )}
           {onEnrol && <Button size="small" variant="outlined" startIcon={<Face />} onClick={onEnrol}>Enrol Face</Button>}
-          {onLogout && <Button size="small" color="inherit" startIcon={<PowerSettingsNew />} onClick={onLogout}>Log out</Button>}
         </Box>
       </Box>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}

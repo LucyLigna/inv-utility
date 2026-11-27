@@ -17,6 +17,10 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', require('./routes/auth'));
 // Driver delivery page: its own login (mobile number + the trip sheet's driver code)
 app.use('/api/driver', require('./routes/driverApp'));
+// Attendance kiosk punches: a kiosk device's key (no one logged in) or a user with the Attendance Kiosk right.
+// Punches are kept in att_punch, so they are not also written to the user log.
+const attendance = require('./routes/attendance');
+app.use('/api/attendance/punch', attendance.punch);
 
 // Everything else needs a logged-in user. Changes on a screen's API need the right to that screen
 // (sys_programfile codes); administrators have every right.
@@ -33,10 +37,9 @@ app.use('/api/branch-bills/sync', screen('P0204', 'Branch Wise Bill Marking'), r
 app.use('/api/branch-bills', screen('P0204', 'Branch Wise Bill Marking'), require('./routes/branchBills'));
 // "Get Latest Bills" on Trip Sheet - Bill Details runs syncs
 app.use('/api/sync', screen('P0203', 'Trip Sheet - Bill Details'), require('./routes/sync'));
-// Attendance (sample): punches are kept in att_punch, so the kiosk's scans are not also written to the user log
-const attendance = require('./routes/attendance');
+// Attendance (sample). Setting up a kiosk device needs the Attendance Kiosk right (and is written to the user log)
 app.use('/api/att-employees', screen('P0401', 'Employee'), attendance.employees);
-app.use('/api/attendance/punch', requireRight('P0402'), attendance.punch);
+app.use('/api/attendance/kiosk-device', screen('P0402', 'Attendance Kiosk'), attendance.kioskDevice);
 app.use('/api/attendance/report', screen('P0403', 'Attendance Report'), attendance.report);
 app.use('/api/users', requireAdmin, logActivity('P0301', 'Users'), require('./routes/users'));
 app.use('/api/user-log', requireAdmin, require('./routes/userLog'));

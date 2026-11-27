@@ -6,6 +6,7 @@
 //   report:    attendance by day (P0403)
 const express = require('express');
 const pool = require('../config/db');
+const { createDriverToken, readToken, loadUser } = require('../auth/auth');
 
 const STATUSES = ['Active', 'Inactive'];
 const DESCRIPTOR_LENGTH = 128;
@@ -159,7 +160,50 @@ async function faceSamples(exceptCode = 0) {
 }
 
 // --- Kiosk ------------------------------------------------------------------------------------------
+// A kiosk device marks attendance without anyone logged in. It is set up once by a user with the Attendance Kiosk
+// right: POST /api/attendance/kiosk-device gives it a kiosk key (a signed token { kiosk, by, dev, iat }) that can only
+// mark attendance. Keys stay valid for KIOSK_YEARS; to switch off every kiosk key at once, set the sys_settings row
+// 'kiosk_keys_from' to the current time in milliseconds (keys made before it stop working; set the devices up again).
+const KIOSK_YEARS = 5;
+const kioskDevice = express.Router();
+kioskDevice.post('/', async (req, res, next) => {
+  try {
+    const iat = Date.now();
+    const token = await createDriverToken( // same signing as every token; this one carries no user
+      { kiosk: 1, by: req.user.user_code, dev: String(req.body.device || '').slice(0, 100), iat },
+      iat + KIOSK_YEARS * 365 * 24 * 3600 * 1000,
+    );
+    res.json({ token, set_up_by: req.user.username });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The punch API takes a kiosk key, or a logged-in user with the Attendance Kiosk right (the web kiosk page)
+async function kioskOrUser(req, res, next) {
+  try {
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    const data = await readToken(token);
+    if (data?.kiosk) {
+      const [[from]] = await pool.query("SELECT setting_value FROM sys_settings WHERE setting_key = 'kiosk_keys_from'");
+      if (from && Number(data.iat) < Number(from.setting_value)) {
+        return res.status(401).json({ message: 'This kiosk has been switched off. Set it up again.', kiosk: 'revoked' });
+      }
+      req.user = { user_code: data.by ?? null, kioskDevice: data.dev || null };
+      return next();
+    }
+    const user = data && await loadUser(data.u);
+    if (!user) return res.status(401).json({ message: 'This kiosk is not set up. Set it up again.', kiosk: 'missing' });
+    if (!user.isAdmin && !user.programs.has('P0402')) return res.status(403).json({ message: 'You do not have the right to the Attendance Kiosk' });
+    req.user = user;
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+}
+
 const punch = express.Router();
+punch.use(kioskOrUser);
 
 // POST { descriptor: [128 numbers], device } -> { matched: false } | { matched: true, name, emp_no, type, time, repeat }
 punch.post('/', async (req, res, next) => {
@@ -190,7 +234,7 @@ punch.post('/', async (req, res, next) => {
     const type = !last || last.punch_type === 'Out' ? 'In' : 'Out';
     await pool.query(
       'INSERT INTO att_punch (emp_code, punch_at, punch_type, distance, user_code, device) VALUES (?, NOW(), ?, ?, ?, ?)',
-      [first.emp_code, type, who.distance, req.user.user_code, String(req.body.device || '').slice(0, 100) || null]
+      [first.emp_code, type, who.distance, req.user.user_code, String(req.body.device || req.user.kioskDevice || '').slice(0, 100) || null]
     );
     const [[now]] = await pool.query("SELECT DATE_FORMAT(NOW(), '%H:%i') AS time");
     res.json({ ...who, type, time: now.time, repeat: false });
@@ -248,4 +292,4 @@ report.get('/', async (req, res, next) => {
   }
 });
 
-module.exports = { employees, punch, report };
+module.exports = { employees, punch, report, kioskDevice };

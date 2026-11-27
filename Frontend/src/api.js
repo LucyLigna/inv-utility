@@ -37,16 +37,17 @@ export const setToken = (token) => {
   } catch { /* storage blocked: the user simply logs in again next time */ }
 };
 
-// Every request carries the login token
+// Every request carries the login token (unless it brings its own, e.g. the kiosk device's key)
 api.interceptors.request.use((config) => {
   const token = getToken();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token && !config.headers.Authorization) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
 // A 401 means the login has expired or the user was switched off: back to the login screen
+// (not for a request with its own key: the kiosk handles that itself)
 api.interceptors.response.use(undefined, (err) => {
-  if (err.response?.status === 401 && !err.config.url.startsWith('/auth/')) {
+  if (err.response?.status === 401 && !err.config.url.startsWith('/auth/') && !err.config.ownKey) {
     setToken(null);
     window.dispatchEvent(new Event('inv-logged-out'));
   }
