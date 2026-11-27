@@ -174,8 +174,10 @@ punch.post('/', async (req, res, next) => {
       if (!cur || d < cur.d) best.set(s.emp_code, { ...s, d });
     }
     const [first, second] = [...best.values()].sort((a, b) => a.d - b.d);
-    if (!first || first.d >= MATCH_DISTANCE) return res.json({ matched: false });
-    if (second && second.d - first.d < MIN_GAP) return res.json({ matched: false, unsure: true });
+    // closest / limit: how near the nearest enrolled face was (no name), shown small on the kiosk for tuning
+    const miss = first ? { closest: Number(first.d.toFixed(3)), limit: MATCH_DISTANCE } : {};
+    if (!first || first.d >= MATCH_DISTANCE) return res.json({ matched: false, ...miss });
+    if (second && second.d - first.d < MIN_GAP) return res.json({ matched: false, unsure: true, ...miss });
 
     const [[last]] = await pool.query(
       `SELECT punch_type, DATE_FORMAT(punch_at, '%H:%i') AS time, TIMESTAMPDIFF(SECOND, punch_at, NOW()) AS ago

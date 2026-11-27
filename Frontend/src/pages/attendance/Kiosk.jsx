@@ -19,8 +19,6 @@ const SCAN_EVERY_MS = 500;
 const BLINK_TIMEOUT_MS = 5000;
 // Eye readings during the blink check run back to back (a blink lasts 100-300 ms; a reading takes about 30-50 ms)
 const BLINK_READ_EVERY_MS = 0;
-// After the blink, the face must still be the one seen before it (descriptor distance)
-const SAME_FACE = 0.35;
 const SHOW_RESULT_MS = 3500;
 const SHOW_UNKNOWN_MS = 2000;
 const STEADY_FRAMES = 2; // the same single face this many scans in a row before it is sent
@@ -36,15 +34,15 @@ const RESULT_STYLE = {
 };
 
 const average = (list) => list[0].map((_, i) => list.reduce((sum, f) => sum + f[i], 0) / list.length);
-const distance = (a, b) => Math.sqrt(a.reduce((sum, x, i) => sum + (x - b[i]) ** 2, 0));
 const center = (box) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
 
 // Waits for one blink of the face in view. 'blinked' | 'timeout' | 'lost' (face gone, another face, or it jumped:
-// a different person stepped in).
-async function blinkCheck(faceapi, video, isAlive, wait) {
+// a different person stepped in). startBox: where the face was when it was read, so the face is followed from
+// that reading through the blink: the face that blinks is the face that was read.
+async function blinkCheck(faceapi, video, isAlive, wait, startBox) {
   const tracker = makeBlinkTracker();
   const until = Date.now() + BLINK_TIMEOUT_MS;
-  let last = null;
+  let last = startBox;
   while (isAlive() && Date.now() < until) {
     let eyes = null;
     try {
@@ -122,30 +120,30 @@ export default function Kiosk() {
         else if (steady > 0 && face && !face.many) frames.push(face.descriptor);
 
         if (steady >= STEADY_FRAMES) {
-          const before = average(frames);
+          // The open-eyed readings are what is matched; the blink only proves they came from a live face.
+          // (A reading taken just after a blink is less reliable, so it is not used.)
+          const descriptor = average(frames);
+          const lastBox = face.box;
           steady = 0;
           frames = [];
-          // Liveness: blink, then the same face must still be there
           setHint('Please blink your eyes');
-          const blink = await blinkCheck(faceapi, videoRef.current, () => alive, wait);
+          const blink = await blinkCheck(faceapi, videoRef.current, () => alive, wait, lastBox);
           if (!alive) break;
-          if (blink !== 'blinked') {
-            if (blink === 'timeout') await show({ kind: 'noblink', title: 'Blink not seen', line: 'Look at the camera and blink once' }, SHOW_UNKNOWN_MS);
+          if (blink === 'timeout') {
+            await show({ kind: 'noblink', title: 'Blink not seen', line: 'Look at the camera and blink once' }, SHOW_UNKNOWN_MS);
             continue;
           }
-          let after = null;
-          try {
-            after = await readFace(faceapi, videoRef.current);
-          } catch {
-            after = null;
+          if (blink === 'lost') {
+            await show({ kind: 'noblink', title: 'Please hold still', line: 'Keep your face in the circle while you blink' }, SHOW_UNKNOWN_MS);
+            continue;
           }
-          if (!after || after.many || distance(after.descriptor, before) > SAME_FACE) continue;
-          const descriptor = average([before, after.descriptor]);
           setHint('Checking…');
           try {
             const { data } = await api.post('/attendance/punch', { descriptor, device: deviceName() });
             if (!data.matched) {
-              await show({ kind: 'unknown', title: 'Not recognised', line: data.unsure ? 'Please look straight at the camera and try again' : 'Ask the office to enrol your face' }, SHOW_UNKNOWN_MS);
+              // closest: how near the nearest enrolled face was (shown small, to help tune the match limit)
+              const line = data.unsure ? 'Please look straight at the camera and try again' : 'Ask the office to enrol your face';
+              await show({ kind: 'unknown', title: 'Not recognised', line, note: data.closest != null ? `closest match ${data.closest} (limit ${data.limit})` : null }, SHOW_RESULT_MS);
             } else if (data.repeat) {
               await show({ kind: 'repeat', title: data.name, line: `Already marked ${data.type} at ${data.time}` }, SHOW_RESULT_MS);
             } else {
@@ -198,6 +196,7 @@ export default function Kiosk() {
               {style.icon}
               <Typography sx={{ fontSize: { xs: 26, md: 36 }, fontWeight: 700, mt: 1 }}>{result.title}</Typography>
               <Typography sx={{ fontSize: { xs: 18, md: 24 } }}>{result.line}</Typography>
+              {result.note && <Typography sx={{ fontSize: 13, opacity: 0.8, mt: 1 }}>{result.note}</Typography>}
             </Box>
           )}
         </Box>
