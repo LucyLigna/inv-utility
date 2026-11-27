@@ -2,14 +2,25 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Alert, Box, Button, CircularProgress, List, ListItem, ListItemText, Paper, Typography,
 } from '@mui/material';
-import { Fullscreen, Login as InIcon, Logout as OutIcon, Replay, HelpOutline } from '@mui/icons-material';
+import {
+  Fullscreen, Login as InIcon, Logout as OutIcon, Replay, HelpOutline, Visibility,
+} from '@mui/icons-material';
 import api, { errorMessage } from '../../api';
-import { MIN_FACE_WIDTH, cameraErrorText, loadFaceApi, readFace, startCamera } from './faceEngine';
+import {
+  MIN_FACE_WIDTH, cameraErrorText, loadFaceApi, makeBlinkTracker, readEyes, readFace, startCamera,
+} from './faceEngine';
 
 // Attendance Kiosk (sample): a shared phone or tablet, logged in once, left on this screen. An employee looks at the
 // camera; the face is read on the device and sent to the server, which marks In (first scan of the day) or Out / In
 // in turn. Only one face may be in view. Repeated scans within two minutes are not marked again.
+// Liveness: before anything is sent the person is asked to blink, so a printed photo or a still picture held up to
+// the camera is not marked. The same face must stay in view through the blink.
 const SCAN_EVERY_MS = 500;
+const BLINK_TIMEOUT_MS = 5000;
+// Eye readings during the blink check run back to back (a blink lasts 100-300 ms; a reading takes about 30-50 ms)
+const BLINK_READ_EVERY_MS = 0;
+// After the blink, the face must still be the one seen before it (descriptor distance)
+const SAME_FACE = 0.35;
 const SHOW_RESULT_MS = 3500;
 const SHOW_UNKNOWN_MS = 2000;
 const STEADY_FRAMES = 2; // the same single face this many scans in a row before it is sent
@@ -21,7 +32,38 @@ const RESULT_STYLE = {
   Out: { bg: '#1a35b0', icon: <OutIcon sx={{ fontSize: 56 }} /> },
   repeat: { bg: '#8a6d00', icon: <Replay sx={{ fontSize: 56 }} /> },
   unknown: { bg: '#b3261e', icon: <HelpOutline sx={{ fontSize: 56 }} /> },
+  noblink: { bg: '#8a6d00', icon: <Visibility sx={{ fontSize: 56 }} /> },
 };
+
+const average = (list) => list[0].map((_, i) => list.reduce((sum, f) => sum + f[i], 0) / list.length);
+const distance = (a, b) => Math.sqrt(a.reduce((sum, x, i) => sum + (x - b[i]) ** 2, 0));
+const center = (box) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
+
+// Waits for one blink of the face in view. 'blinked' | 'timeout' | 'lost' (face gone, another face, or it jumped:
+// a different person stepped in).
+async function blinkCheck(faceapi, video, isAlive, wait) {
+  const tracker = makeBlinkTracker();
+  const until = Date.now() + BLINK_TIMEOUT_MS;
+  let last = null;
+  while (isAlive() && Date.now() < until) {
+    let eyes = null;
+    try {
+      eyes = await readEyes(faceapi, video);
+    } catch {
+      eyes = null;
+    }
+    if (!eyes || eyes.many || eyes.box.width < MIN_FACE_WIDTH * 0.8) return 'lost';
+    if (last) {
+      const a = center(last);
+      const b = center(eyes.box);
+      if (Math.hypot(a.x - b.x, a.y - b.y) > last.width * 0.5) return 'lost';
+    }
+    last = eyes.box;
+    if (tracker.push(eyes.ear) === 'blinked') return 'blinked';
+    await wait(BLINK_READ_EVERY_MS);
+  }
+  return 'timeout';
+}
 
 export default function Kiosk() {
   const videoRef = useRef(null);
@@ -80,9 +122,25 @@ export default function Kiosk() {
         else if (steady > 0 && face && !face.many) frames.push(face.descriptor);
 
         if (steady >= STEADY_FRAMES) {
-          const descriptor = frames[0].map((_, i) => frames.reduce((sum, f) => sum + f[i], 0) / frames.length);
+          const before = average(frames);
           steady = 0;
           frames = [];
+          // Liveness: blink, then the same face must still be there
+          setHint('Please blink your eyes');
+          const blink = await blinkCheck(faceapi, videoRef.current, () => alive, wait);
+          if (!alive) break;
+          if (blink !== 'blinked') {
+            if (blink === 'timeout') await show({ kind: 'noblink', title: 'Blink not seen', line: 'Look at the camera and blink once' }, SHOW_UNKNOWN_MS);
+            continue;
+          }
+          let after = null;
+          try {
+            after = await readFace(faceapi, videoRef.current);
+          } catch {
+            after = null;
+          }
+          if (!after || after.many || distance(after.descriptor, before) > SAME_FACE) continue;
+          const descriptor = average([before, after.descriptor]);
           setHint('Checking…');
           try {
             const { data } = await api.post('/attendance/punch', { descriptor, device: deviceName() });
