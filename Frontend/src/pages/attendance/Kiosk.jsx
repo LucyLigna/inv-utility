@@ -60,8 +60,11 @@ async function blinkCheck(faceapi, video, isAlive, wait, startBox) {
     if (tracker.push(eyes.ear) === 'blinked') return 'blinked';
     await wait(BLINK_READ_EVERY_MS);
   }
+  lastBlinkStats = tracker.stats();
   return 'timeout';
 }
+// What the last missed blink check saw, for the note under "Blink not seen"
+let lastBlinkStats = null;
 
 export default function Kiosk() {
   const videoRef = useRef(null);
@@ -130,7 +133,9 @@ export default function Kiosk() {
           const blink = await blinkCheck(faceapi, videoRef.current, () => alive, wait, lastBox);
           if (!alive) break;
           if (blink === 'timeout') {
-            await show({ kind: 'noblink', title: 'Blink not seen', line: 'Look at the camera and blink once' }, SHOW_UNKNOWN_MS);
+            const s = lastBlinkStats;
+            const note = s && `${s.readings} readings in ${BLINK_TIMEOUT_MS / 1000} s · eyes closed by ${s.closedBy}% at most (a blink needs ${s.needed}%)`;
+            await show({ kind: 'noblink', title: 'Blink not seen', line: 'Look at the camera and blink slowly once', note }, SHOW_RESULT_MS);
             continue;
           }
           if (blink === 'lost') {

@@ -67,34 +67,35 @@ export async function readEyes(faceapi, video) {
 }
 
 // Blink check (liveness): a printed photo or a still picture on a screen can't blink. Feed it each reading's eye
-// ratio; push() returns 'waiting' until the eyes have been seen open, then shut (below CLOSED of the open level),
-// then open again (above REOPENED), and 'blinked' from then on. The open level is the median of the first readings,
-// so it works for any eye shape.
+// ratio; push() returns 'waiting' until the eyes have been seen shut (below CLOSED of the open level) and then open
+// again (above REOPENED), and 'blinked' from then on. The open level is the second-highest reading so far (one odd
+// high reading doesn't count), so it works for any eye shape, glasses, and eyes not wide open at the start.
+// The landmark model under-reads closed eyes, so "shut" is only a 15% drop; a still photo jitters by about 3-5%.
 const BASELINE_READINGS = 3;
-const MIN_OPEN = 0.15; // eyes must be clearly open at the start (open eyes read about 0.25-0.4)
-// The landmark model under-reads closed eyes, so "shut" is a 22% drop; a still photo's jitter is about 3-5%
-const CLOSED = 0.78;
-const REOPENED = 0.88;
+const CLOSED = 0.85;
+const REOPENED = 0.93;
 export function makeBlinkTracker() {
-  const first = [];
-  let open = null;
+  const seen = [];
   let shut = false;
   let done = false;
+  let lowest = Infinity; // lowest reading against the open level at that moment (for the "Blink not seen" note)
+  const openLevel = () => {
+    const sorted = [...seen].sort((a, b) => b - a);
+    return sorted[1] ?? sorted[0];
+  };
   return {
     push(ear) {
       if (done) return 'blinked';
-      if (open === null) {
-        first.push(ear);
-        if (first.length < BASELINE_READINGS) return 'waiting';
-        const level = [...first].sort((a, b) => a - b)[Math.floor(first.length / 2)];
-        if (level < MIN_OPEN) { first.shift(); return 'waiting'; } // not open yet: keep looking
-        open = level;
-        return 'waiting';
-      }
+      seen.push(ear);
+      if (seen.length < BASELINE_READINGS) return 'waiting';
+      const open = openLevel();
+      lowest = Math.min(lowest, ear / open);
       if (!shut && ear < open * CLOSED) shut = true;
       else if (shut && ear > open * REOPENED) done = true;
       return done ? 'blinked' : 'waiting';
     },
+    // What was seen: number of readings, and how far the eyes closed at most (percent of open)
+    stats: () => ({ readings: seen.length, closedBy: Number.isFinite(lowest) ? Math.round((1 - lowest) * 100) : 0, needed: Math.round((1 - CLOSED) * 100) }),
   };
 }
 
