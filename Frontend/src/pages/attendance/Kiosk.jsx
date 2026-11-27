@@ -3,7 +3,7 @@ import {
   Alert, Box, Button, CircularProgress, List, ListItem, ListItemText, Paper, Typography,
 } from '@mui/material';
 import {
-  Fullscreen, Login as InIcon, Logout as OutIcon, Replay, HelpOutline, Visibility,
+  Fullscreen, Login as InIcon, Logout as OutIcon, PowerSettingsNew, Replay, HelpOutline, Visibility,
 } from '@mui/icons-material';
 import api, { errorMessage } from '../../api';
 import {
@@ -66,7 +66,8 @@ async function blinkCheck(faceapi, video, isAlive, wait, startBox) {
 // What the last missed blink check saw, for the note under "Blink not seen"
 let lastBlinkStats = null;
 
-export default function Kiosk() {
+// onLogout: shown as a Log out button (the Android kiosk app, which has no menu); on the web the menu has it
+export default function Kiosk({ onLogout }) {
   const videoRef = useRef(null);
   const boxRef = useRef(null);
   const [hint, setHint] = useState('Starting…');
@@ -78,6 +79,22 @@ export default function Kiosk() {
   useEffect(() => {
     const t = setInterval(() => setClock(new Date()), 1000);
     return () => clearInterval(t);
+  }, []);
+
+  // Keep the screen on while the kiosk is open (Screen Wake Lock; released when the page is hidden, so taken again)
+  useEffect(() => {
+    let lock = null;
+    const take = async () => {
+      try {
+        if (document.visibilityState === 'visible' && navigator.wakeLock) lock = await navigator.wakeLock.request('screen');
+      } catch { /* not allowed here: the screen follows the device's own sleep setting */ }
+    };
+    take();
+    document.addEventListener('visibilitychange', take);
+    return () => {
+      document.removeEventListener('visibilitychange', take);
+      lock?.release().catch(() => {});
+    };
   }, []);
 
   useEffect(() => {
@@ -180,9 +197,10 @@ export default function Kiosk() {
           <Typography sx={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
             {clock.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </Typography>
-          {document.fullscreenEnabled && (
+          {document.fullscreenEnabled && !onLogout && (
             <Button size="small" startIcon={<Fullscreen />} onClick={() => boxRef.current?.requestFullscreen?.()}>Full screen</Button>
           )}
+          {onLogout && <Button size="small" color="inherit" startIcon={<PowerSettingsNew />} onClick={onLogout}>Log out</Button>}
         </Box>
       </Box>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}

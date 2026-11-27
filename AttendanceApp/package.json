@@ -1,0 +1,18 @@
+{
+  "name": "inventory-attendance-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Android app (Capacitor) for the face-scan Attendance Kiosk of Inventory Utility",
+  "scripts": {
+    "build:web": "npm --prefix ../Frontend run build:kiosk",
+    "sync": "npm run build:web && npx cap sync android",
+    "open": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.0"
+  }
+}

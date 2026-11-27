@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "build:driver": "vite build --config vite.driver.config.js --mode driver && node -e \"require('fs').renameSync('../DriverApp/www/driver.html','../DriverApp/www/index.html')\""
+    "build:driver": "vite build --config vite.driver.config.js --mode driver && node -e \"require('fs').renameSync('../DriverApp/www/driver.html','../DriverApp/www/index.html')\"",
+    "build:kiosk": "vite build --config vite.kiosk.config.js --mode kiosk && node -e \"require('fs').renameSync('../AttendanceApp/www/kiosk.html','../AttendanceApp/www/index.html')\""
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
