@@ -57,7 +57,7 @@ async function blinkCheck(faceapi, video, isAlive, wait, startBox) {
       if (Math.hypot(a.x - b.x, a.y - b.y) > last.width * 0.5) return 'lost';
     }
     last = eyes.box;
-    if (tracker.push(eyes.ear) === 'blinked') return 'blinked';
+    if (tracker.push(eyes) === 'blinked') return 'blinked';
     await wait(BLINK_READ_EVERY_MS);
   }
   lastBlinkStats = tracker.stats();
@@ -134,7 +134,8 @@ export default function Kiosk() {
           if (!alive) break;
           if (blink === 'timeout') {
             const s = lastBlinkStats;
-            const note = s && `${s.readings} readings in ${BLINK_TIMEOUT_MS / 1000} s · eyes closed by ${s.closedBy}% at most (a blink needs ${s.needed}%)`;
+            const note = s && `${s.readings} readings in ${BLINK_TIMEOUT_MS / 1000} s · eye shape ${s.closedBy}% (needs ${s.needed}%)`
+              + `${s.contrastBy != null ? ` · eye contrast ${s.contrastBy}% (needs ${s.contrastNeeded}%)` : ''}`;
             await show({ kind: 'noblink', title: 'Blink not seen', line: 'Look at the camera and blink slowly once', note }, SHOW_RESULT_MS);
             continue;
           }

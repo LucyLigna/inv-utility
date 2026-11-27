@@ -48,10 +48,49 @@ const eyeRatio = (p) => (dist(p[1], p[5]) + dist(p[2], p[4])) / (2 * dist(p[0], 
 
 const mid = (points) => ({ x: points.reduce((s, p) => s + p.x, 0) / points.length, y: points.reduce((s, p) => s + p.y, 0) / points.length });
 
-// Quick reading for the blink check (no descriptor, so it is fast): { ear, box } for the one face,
+// Pixels of the current frame, for the eye-darkness reading (one canvas, reused)
+let frameCanvas = null;
+function frameContext(input) {
+  const w = input.videoWidth || input.width;
+  const h = input.videoHeight || input.height;
+  if (!frameCanvas) frameCanvas = document.createElement('canvas');
+  if (frameCanvas.width !== w || frameCanvas.height !== h) {
+    frameCanvas.width = w;
+    frameCanvas.height = h;
+  }
+  const ctx = frameCanvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(input, 0, 0, w, h);
+  return ctx;
+}
+// Brightness (0-255) of each pixel in a box around (cx, cy)
+function brightness(ctx, cx, cy, w, h) {
+  const x = Math.max(0, Math.round(cx - w / 2));
+  const y = Math.max(0, Math.round(cy - h / 2));
+  const { data } = ctx.getImageData(x, y, Math.max(1, Math.round(w)), Math.max(1, Math.round(h)));
+  const out = [];
+  for (let i = 0; i < data.length; i += 4) out.push(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+  return out;
+}
+const percentile = (sorted, q) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+// Contrast in the eye area: an open eye has white and dark parts (sclera, iris, pupil, lashes); a closed lid is
+// nearly even. (bright - dark) / middle brightness, so the room's light doesn't matter. Tested on the demo photos:
+// open eyes 0.75-1.7, the same eyes painted shut fell by 90%, a still photo moved about wobbled by up to 14%.
+// (The landmark model's eye shape hardly changes when eyes close: it hardly moved even with the eyes painted shut.)
+function eyeContrast(ctx, left, right) {
+  const one = (eye) => {
+    const w = dist(eye[0], eye[3]);
+    const c = mid(eye);
+    const px = brightness(ctx, c.x, c.y, w * 0.9, w * 0.45).sort((a, b) => a - b);
+    return (percentile(px, 0.9) - percentile(px, 0.1)) / (percentile(px, 0.5) + 10);
+  };
+  return (one(left) + one(right)) / 2;
+}
+
+// Quick reading for the blink check (no descriptor, so it is fast): { ear, contrast, box } for the one face,
 // { many: true } for more than one, or null for none.
 // ear = eye ratio of both eyes, divided by the face's own height/width (eyes-to-mouth over eye-to-eye distance):
 // tilting a photo back squashes the whole face, which then cancels out; a blink only closes the eyes.
+// contrast = contrast in the eye areas (see eyeContrast): the main blink signal.
 export async function readEyes(faceapi, video) {
   const options = new faceapi.TinyFaceDetectorOptions({ inputSize: INPUT_SIZE, scoreThreshold: MIN_SCORE });
   const found = await faceapi.detectAllFaces(video, options).withFaceLandmarks();
@@ -63,39 +102,68 @@ export async function readEyes(faceapi, video) {
   const right = landmarks.getRightEye();
   const eyes = mid([...left, ...right]);
   const shape = dist(eyes, mid(landmarks.getMouth())) / dist(mid(left), mid(right));
-  return { ear: (eyeRatio(left) + eyeRatio(right)) / 2 / shape, box: { x, y, width, height } };
+  let contrast = null;
+  try {
+    contrast = eyeContrast(frameContext(video), left, right);
+  } catch {
+    contrast = null; // pixels not readable: the eye ratio still works
+  }
+  return { ear: (eyeRatio(left) + eyeRatio(right)) / 2 / shape, contrast, box: { x, y, width, height } };
 }
 
-// Blink check (liveness): a printed photo or a still picture on a screen can't blink. Feed it each reading's eye
-// ratio; push() returns 'waiting' until the eyes have been seen shut (below CLOSED of the open level) and then open
-// again (above REOPENED), and 'blinked' from then on. The open level is the second-highest reading so far (one odd
-// high reading doesn't count), so it works for any eye shape, glasses, and eyes not wide open at the start.
-// The landmark model under-reads closed eyes, so "shut" is only a 15% drop; a still photo jitters by about 3-5%.
+// Blink check (liveness): a printed photo or a still picture on a screen can't blink.
+// A dip: a reading falls below `closed` of its open level, then comes back above `reopened`. The open level is the
+// second-highest reading so far (one odd high reading doesn't count), so it works for any eyes, glasses, and eyes
+// not wide open at the start.
 const BASELINE_READINGS = 3;
-const CLOSED = 0.85;
-const REOPENED = 0.93;
-export function makeBlinkTracker() {
+function makeDip(closed, reopened) {
   const seen = [];
   let shut = false;
   let done = false;
-  let lowest = Infinity; // lowest reading against the open level at that moment (for the "Blink not seen" note)
-  const openLevel = () => {
-    const sorted = [...seen].sort((a, b) => b - a);
-    return sorted[1] ?? sorted[0];
-  };
+  let lowest = Infinity; // lowest reading against the open level (for the "Blink not seen" note)
   return {
-    push(ear) {
-      if (done) return 'blinked';
-      seen.push(ear);
-      if (seen.length < BASELINE_READINGS) return 'waiting';
-      const open = openLevel();
-      lowest = Math.min(lowest, ear / open);
-      if (!shut && ear < open * CLOSED) shut = true;
-      else if (shut && ear > open * REOPENED) done = true;
-      return done ? 'blinked' : 'waiting';
+    push(value) {
+      if (done || value == null) return done;
+      seen.push(value);
+      if (seen.length < BASELINE_READINGS) return false;
+      const sorted = [...seen].sort((a, b) => b - a);
+      const open = sorted[1];
+      if (!(open > 0)) return false;
+      lowest = Math.min(lowest, value / open);
+      if (!shut && value < open * closed) shut = true;
+      else if (shut && value > open * reopened) done = true;
+      return done;
     },
-    // What was seen: number of readings, and how far the eyes closed at most (percent of open)
-    stats: () => ({ readings: seen.length, closedBy: Number.isFinite(lowest) ? Math.round((1 - lowest) * 100) : 0, needed: Math.round((1 - CLOSED) * 100) }),
+    closedBy: () => (Number.isFinite(lowest) ? Math.round((1 - lowest) * 100) : 0),
+    readings: () => seen.length,
+  };
+}
+// Two signals, either may see the blink:
+//  eye contrast (main): a 35% drop counts as shut; a still photo wobbles by up to about 15%
+//  eye ratio: the landmark model barely sees closed eyes, so a 15% drop counts (a still photo jitters 3-5%)
+const EAR_CLOSED = 0.85;
+const EAR_REOPENED = 0.93;
+const CONTRAST_CLOSED = 0.65;
+const CONTRAST_REOPENED = 0.85;
+export function makeBlinkTracker() {
+  const ear = makeDip(EAR_CLOSED, EAR_REOPENED);
+  const contrast = makeDip(CONTRAST_CLOSED, CONTRAST_REOPENED);
+  return {
+    // reading: { ear, contrast } from readEyes (a bare number is taken as the eye ratio)
+    push(reading) {
+      const r = typeof reading === 'number' ? { ear: reading, contrast: null } : reading;
+      const a = ear.push(r.ear);
+      const b = contrast.push(r.contrast);
+      return a || b ? 'blinked' : 'waiting';
+    },
+    // What was seen: readings, and how far each signal dropped at most against what a blink needs (percent)
+    stats: () => ({
+      readings: ear.readings(),
+      closedBy: ear.closedBy(),
+      needed: Math.round((1 - EAR_CLOSED) * 100),
+      contrastBy: contrast.readings() ? contrast.closedBy() : null,
+      contrastNeeded: Math.round((1 - CONTRAST_CLOSED) * 100),
+    }),
   };
 }
 
